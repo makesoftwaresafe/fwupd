@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2021 Richard Hughes <richard@hughsie.com>
+ * Copyright 2021 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #pragma once
@@ -17,6 +17,7 @@ typedef enum {
 	FU_REDFISH_REQUEST_PERFORM_FLAG_NONE = 0,
 	FU_REDFISH_REQUEST_PERFORM_FLAG_LOAD_JSON = 1 << 0,
 	FU_REDFISH_REQUEST_PERFORM_FLAG_USE_CACHE = 1 << 1,
+	FU_REDFISH_REQUEST_PERFORM_FLAG_USE_ETAG = 1 << 2,
 } FuRedfishRequestPerformFlags;
 
 gboolean
@@ -37,13 +38,8 @@ CURL *
 fu_redfish_request_get_curl(FuRedfishRequest *self);
 void
 fu_redfish_request_set_curlsh(FuRedfishRequest *self, CURLSH *curlsh);
-#ifdef HAVE_LIBCURL_7_62_0
 CURLU *
 fu_redfish_request_get_uri(FuRedfishRequest *self);
-#else
-void
-fu_redfish_request_set_uri_base(FuRedfishRequest *self, const gchar *uri_base);
-#endif
 glong
 fu_redfish_request_get_status_code(FuRedfishRequest *self);
 void

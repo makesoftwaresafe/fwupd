@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2020 Richard Hughes <richard@hughsie.com>
+ * Copyright 2020 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #pragma once
@@ -13,8 +13,10 @@
 G_DECLARE_FINAL_TYPE(FuSecurityAttrs, fu_security_attrs, FU, SECURITY_ATTRS, GObject)
 
 void
-fu_security_attrs_append(FuSecurityAttrs *self, FwupdSecurityAttr *attr);
+fu_security_attrs_append(FuSecurityAttrs *self, FwupdSecurityAttr *attr) G_GNUC_NON_NULL(1, 2);
 void
-fu_security_attrs_remove_all(FuSecurityAttrs *self);
+fu_security_attrs_remove_all(FuSecurityAttrs *self) G_GNUC_NON_NULL(1);
 FwupdSecurityAttr *
-fu_security_attrs_get_by_appstream_id(FuSecurityAttrs *self, const gchar *appstream_id);
+fu_security_attrs_get_by_appstream_id(FuSecurityAttrs *self,
+				      const gchar *appstream_id,
+				      GError **error) G_GNUC_NON_NULL(1, 2);

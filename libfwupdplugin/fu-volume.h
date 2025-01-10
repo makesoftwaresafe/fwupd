@@ -1,11 +1,13 @@
 /*
- * Copyright (C) 2018 Richard Hughes <richard@hughsie.com>
- * Copyright (C) 2019 Mario Limonciello <mario.limonciello@dell.com>
+ * Copyright 2018 Richard Hughes <richard@hughsie.com>
+ * Copyright 2019 Mario Limonciello <mario.limonciello@dell.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #pragma once
+
+#include <fwupd.h>
 
 #include "fu-device-locker.h"
 
@@ -31,36 +33,54 @@ G_DECLARE_FINAL_TYPE(FuVolume, fu_volume, FU, VOLUME, GObject)
 #define FU_VOLUME_KIND_BDP "ebd0a0a2-b9e5-4433-87c0-68b6b72699c7"
 
 const gchar *
-fu_volume_get_id(FuVolume *self);
+fu_volume_get_id(FuVolume *self) G_GNUC_NON_NULL(1);
 gboolean
 fu_volume_check_free_space(FuVolume *self,
 			   guint64 required,
-			   GError **error) G_GNUC_WARN_UNUSED_RESULT;
+			   GError **error) G_GNUC_WARN_UNUSED_RESULT G_GNUC_NON_NULL(1);
 gboolean
-fu_volume_is_mounted(FuVolume *self);
+fu_volume_is_mounted(FuVolume *self) G_GNUC_NON_NULL(1);
 gboolean
-fu_volume_is_encrypted(FuVolume *self);
-const gchar *
-fu_volume_get_partition_kind(FuVolume *self);
+fu_volume_is_encrypted(FuVolume *self) G_GNUC_NON_NULL(1);
+guint64
+fu_volume_get_size(FuVolume *self) G_GNUC_NON_NULL(1);
 gchar *
-fu_volume_get_mount_point(FuVolume *self);
+fu_volume_get_block_name(FuVolume *self) G_GNUC_NON_NULL(1);
+gsize
+fu_volume_get_block_size(FuVolume *self, GError **error) G_GNUC_NON_NULL(1);
+gchar *
+fu_volume_get_partition_kind(FuVolume *self) G_GNUC_NON_NULL(1);
+gchar *
+fu_volume_get_partition_name(FuVolume *self) G_GNUC_NON_NULL(1);
+guint64
+fu_volume_get_partition_size(FuVolume *self) G_GNUC_NON_NULL(1);
+guint64
+fu_volume_get_partition_offset(FuVolume *self) G_GNUC_NON_NULL(1);
+guint32
+fu_volume_get_partition_number(FuVolume *self) G_GNUC_NON_NULL(1);
+gchar *
+fu_volume_get_partition_uuid(FuVolume *self) G_GNUC_NON_NULL(1);
+gchar *
+fu_volume_get_mount_point(FuVolume *self) G_GNUC_NON_NULL(1);
 gboolean
-fu_volume_mount(FuVolume *self, GError **error) G_GNUC_WARN_UNUSED_RESULT;
+fu_volume_mount(FuVolume *self, GError **error) G_GNUC_WARN_UNUSED_RESULT G_GNUC_NON_NULL(1);
 gboolean
-fu_volume_unmount(FuVolume *self, GError **error) G_GNUC_WARN_UNUSED_RESULT;
+fu_volume_unmount(FuVolume *self, GError **error) G_GNUC_WARN_UNUSED_RESULT G_GNUC_NON_NULL(1);
 FuDeviceLocker *
-fu_volume_locker(FuVolume *self, GError **error) G_GNUC_WARN_UNUSED_RESULT;
+fu_volume_locker(FuVolume *self, GError **error) G_GNUC_WARN_UNUSED_RESULT G_GNUC_NON_NULL(1);
 gboolean
-fu_volume_is_internal(FuVolume *self);
+fu_volume_is_internal(FuVolume *self) G_GNUC_NON_NULL(1);
 gchar *
-fu_volume_get_id_type(FuVolume *self);
+fu_volume_get_id_type(FuVolume *self) G_GNUC_NON_NULL(1);
 GPtrArray *
-fu_volume_new_by_kind(const gchar *kind, GError **error) G_GNUC_WARN_UNUSED_RESULT;
+fu_volume_new_by_kind(const gchar *kind, GError **error) G_GNUC_WARN_UNUSED_RESULT
+    G_GNUC_NON_NULL(1);
 FuVolume *
-fu_volume_new_by_device(const gchar *device, GError **error) G_GNUC_WARN_UNUSED_RESULT;
+fu_volume_new_by_device(const gchar *device, GError **error) G_GNUC_WARN_UNUSED_RESULT
+    G_GNUC_NON_NULL(1);
 FuVolume *
 fu_volume_new_by_devnum(guint32 devnum, GError **error) G_GNUC_WARN_UNUSED_RESULT;
-FuVolume *
-fu_volume_new_esp_for_path(const gchar *esp_path, GError **error) G_GNUC_WARN_UNUSED_RESULT;
 const gchar *
-fu_volume_kind_convert_to_gpt(const gchar *kind);
+fu_volume_kind_convert_to_gpt(const gchar *kind) G_GNUC_NON_NULL(1);
+gboolean
+fu_volume_is_mdraid(FuVolume *self) G_GNUC_NON_NULL(1);

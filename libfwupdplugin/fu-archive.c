@@ -1,8 +1,8 @@
 /*
- * Copyright (C) 2018 Richard Hughes <richard@hughsie.com>
- * Copyright (C) 2022 Gaël PORTAY <gael.portay@collabora.com>
+ * Copyright 2018 Richard Hughes <richard@hughsie.com>
+ * Copyright 2022 Gaël PORTAY <gael.portay@collabora.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #define G_LOG_DOMAIN "FuArchive"
@@ -19,6 +19,8 @@
 #include "fwupd-error.h"
 
 #include "fu-archive.h"
+#include "fu-bytes.h"
+#include "fu-input-stream.h"
 
 /**
  * FuArchive:
@@ -32,190 +34,6 @@ struct _FuArchive {
 };
 
 G_DEFINE_TYPE(FuArchive, fu_archive, G_TYPE_OBJECT)
-
-/**
- * fu_archive_format_to_string:
- * @format: a format, e.g. %FU_ARCHIVE_FORMAT_ZIP
- *
- * Converts an enumerated format to a string.
- *
- * Returns: identifier string
- *
- * Since: 1.8.1
- **/
-const gchar *
-fu_archive_format_to_string(FuArchiveFormat format)
-{
-	if (format == FU_ARCHIVE_FORMAT_UNKNOWN)
-		return "unknown";
-	if (format == FU_ARCHIVE_FORMAT_CPIO)
-		return "cpio";
-	if (format == FU_ARCHIVE_FORMAT_SHAR)
-		return "shar";
-	if (format == FU_ARCHIVE_FORMAT_TAR)
-		return "tar";
-	if (format == FU_ARCHIVE_FORMAT_USTAR)
-		return "ustar";
-	if (format == FU_ARCHIVE_FORMAT_PAX)
-		return "pax";
-	if (format == FU_ARCHIVE_FORMAT_GNUTAR)
-		return "gnutar";
-	if (format == FU_ARCHIVE_FORMAT_ISO9660)
-		return "iso9660";
-	if (format == FU_ARCHIVE_FORMAT_ZIP)
-		return "zip";
-	if (format == FU_ARCHIVE_FORMAT_AR)
-		return "ar";
-	if (format == FU_ARCHIVE_FORMAT_AR_SVR4)
-		return "ar-svr4";
-	if (format == FU_ARCHIVE_FORMAT_MTREE)
-		return "mtree";
-	if (format == FU_ARCHIVE_FORMAT_RAW)
-		return "raw";
-	if (format == FU_ARCHIVE_FORMAT_XAR)
-		return "xar";
-	if (format == FU_ARCHIVE_FORMAT_7ZIP)
-		return "7zip";
-	if (format == FU_ARCHIVE_FORMAT_WARC)
-		return "warc";
-	return NULL;
-}
-
-/**
- * fu_archive_format_from_string:
- * @format: (nullable): a string, e.g. `zip`
- *
- * Converts a string to an enumerated format.
- *
- * Returns: enumerated value
- *
- * Since: 1.8.1
- **/
-FuArchiveFormat
-fu_archive_format_from_string(const gchar *format)
-{
-	if (g_strcmp0(format, "unknown") == 0)
-		return FU_ARCHIVE_FORMAT_UNKNOWN;
-	if (g_strcmp0(format, "cpio") == 0)
-		return FU_ARCHIVE_FORMAT_CPIO;
-	if (g_strcmp0(format, "shar") == 0)
-		return FU_ARCHIVE_FORMAT_SHAR;
-	if (g_strcmp0(format, "tar") == 0)
-		return FU_ARCHIVE_FORMAT_TAR;
-	if (g_strcmp0(format, "ustar") == 0)
-		return FU_ARCHIVE_FORMAT_USTAR;
-	if (g_strcmp0(format, "pax") == 0)
-		return FU_ARCHIVE_FORMAT_PAX;
-	if (g_strcmp0(format, "gnutar") == 0)
-		return FU_ARCHIVE_FORMAT_GNUTAR;
-	if (g_strcmp0(format, "iso9660") == 0)
-		return FU_ARCHIVE_FORMAT_ISO9660;
-	if (g_strcmp0(format, "zip") == 0)
-		return FU_ARCHIVE_FORMAT_ZIP;
-	if (g_strcmp0(format, "ar") == 0)
-		return FU_ARCHIVE_FORMAT_AR;
-	if (g_strcmp0(format, "ar-svr4") == 0)
-		return FU_ARCHIVE_FORMAT_AR_SVR4;
-	if (g_strcmp0(format, "mtree") == 0)
-		return FU_ARCHIVE_FORMAT_MTREE;
-	if (g_strcmp0(format, "raw") == 0)
-		return FU_ARCHIVE_FORMAT_RAW;
-	if (g_strcmp0(format, "xar") == 0)
-		return FU_ARCHIVE_FORMAT_XAR;
-	if (g_strcmp0(format, "7zip") == 0)
-		return FU_ARCHIVE_FORMAT_7ZIP;
-	if (g_strcmp0(format, "warc") == 0)
-		return FU_ARCHIVE_FORMAT_WARC;
-	return FU_ARCHIVE_FORMAT_UNKNOWN;
-}
-
-/**
- * fu_archive_compression_to_string:
- * @compression: a compression, e.g. %FU_ARCHIVE_COMPRESSION_ZIP
- *
- * Converts an enumerated compression to a string.
- *
- * Returns: identifier string
- *
- * Since: 1.8.1
- **/
-const gchar *
-fu_archive_compression_to_string(FuArchiveCompression compression)
-{
-	if (compression == FU_ARCHIVE_COMPRESSION_UNKNOWN)
-		return "unknown";
-	if (compression == FU_ARCHIVE_COMPRESSION_NONE)
-		return "none";
-	if (compression == FU_ARCHIVE_COMPRESSION_GZIP)
-		return "gzip";
-	if (compression == FU_ARCHIVE_COMPRESSION_BZIP2)
-		return "bzip2";
-	if (compression == FU_ARCHIVE_COMPRESSION_COMPRESS)
-		return "compress";
-	if (compression == FU_ARCHIVE_COMPRESSION_LZMA)
-		return "lzma";
-	if (compression == FU_ARCHIVE_COMPRESSION_XZ)
-		return "xz";
-	if (compression == FU_ARCHIVE_COMPRESSION_UU)
-		return "uuencode";
-	if (compression == FU_ARCHIVE_COMPRESSION_LZIP)
-		return "lzip";
-	if (compression == FU_ARCHIVE_COMPRESSION_LRZIP)
-		return "lrzip";
-	if (compression == FU_ARCHIVE_COMPRESSION_LZOP)
-		return "lzop";
-	if (compression == FU_ARCHIVE_COMPRESSION_GRZIP)
-		return "grzip";
-	if (compression == FU_ARCHIVE_COMPRESSION_LZ4)
-		return "lz4";
-	if (compression == FU_ARCHIVE_COMPRESSION_ZSTD)
-		return "zstd";
-	return NULL;
-}
-
-/**
- * fu_archive_compression_from_string:
- * @compression: (nullable): a string, e.g. `zip`
- *
- * Converts a string to an enumerated compression.
- *
- * Returns: enumerated value
- *
- * Since: 1.8.1
- **/
-FuArchiveCompression
-fu_archive_compression_from_string(const gchar *compression)
-{
-	if (g_strcmp0(compression, "unknown") == 0)
-		return FU_ARCHIVE_COMPRESSION_UNKNOWN;
-	if (g_strcmp0(compression, "none") == 0)
-		return FU_ARCHIVE_COMPRESSION_NONE;
-	if (g_strcmp0(compression, "gzip") == 0)
-		return FU_ARCHIVE_COMPRESSION_GZIP;
-	if (g_strcmp0(compression, "bzip2") == 0)
-		return FU_ARCHIVE_COMPRESSION_BZIP2;
-	if (g_strcmp0(compression, "compress") == 0)
-		return FU_ARCHIVE_COMPRESSION_COMPRESS;
-	if (g_strcmp0(compression, "lzma") == 0)
-		return FU_ARCHIVE_COMPRESSION_LZMA;
-	if (g_strcmp0(compression, "xz") == 0)
-		return FU_ARCHIVE_COMPRESSION_XZ;
-	if (g_strcmp0(compression, "uuencode") == 0)
-		return FU_ARCHIVE_COMPRESSION_UU;
-	if (g_strcmp0(compression, "lzip") == 0)
-		return FU_ARCHIVE_COMPRESSION_LZIP;
-	if (g_strcmp0(compression, "lrzip") == 0)
-		return FU_ARCHIVE_COMPRESSION_LRZIP;
-	if (g_strcmp0(compression, "lzop") == 0)
-		return FU_ARCHIVE_COMPRESSION_LZOP;
-	if (g_strcmp0(compression, "grzip") == 0)
-		return FU_ARCHIVE_COMPRESSION_GRZIP;
-	if (g_strcmp0(compression, "lz4") == 0)
-		return FU_ARCHIVE_COMPRESSION_LZ4;
-	if (g_strcmp0(compression, "zstd") == 0)
-		return FU_ARCHIVE_COMPRESSION_ZSTD;
-	return FU_ARCHIVE_COMPRESSION_UNKNOWN;
-}
 
 static void
 fu_archive_finalize(GObject *obj)
@@ -267,7 +85,7 @@ fu_archive_add_entry(FuArchive *self, const gchar *fn, GBytes *blob)
  *
  * Finds the blob referenced by filename
  *
- * Returns: (transfer none): a #GBytes, or %NULL if the filename was not found
+ * Returns: (transfer full): a #GBytes, or %NULL if the filename was not found
  *
  * Since: 1.2.2
  **/
@@ -282,9 +100,10 @@ fu_archive_lookup_by_fn(FuArchive *self, const gchar *fn, GError **error)
 
 	bytes = g_hash_table_lookup(self->entries, fn);
 	if (bytes == NULL) {
-		g_set_error(error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND, "no blob for %s", fn);
+		g_set_error(error, FWUPD_ERROR, FWUPD_ERROR_NOT_FOUND, "no blob for %s", fn);
+		return NULL;
 	}
-	return bytes;
+	return g_bytes_ref(bytes);
 }
 
 /**
@@ -327,34 +146,34 @@ fu_archive_iterate(FuArchive *self,
 typedef struct archive _archive_read_ctx;
 
 static void
-_archive_read_ctx_free(_archive_read_ctx *arch)
+fu_archive_read_ctx_free(_archive_read_ctx *arch)
 {
 	archive_read_close(arch);
 	archive_read_free(arch);
 }
 
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(_archive_read_ctx, _archive_read_ctx_free)
+G_DEFINE_AUTOPTR_CLEANUP_FUNC(_archive_read_ctx, fu_archive_read_ctx_free)
 
 typedef struct archive _archive_write_ctx;
 
 static void
-_archive_write_ctx_free(_archive_write_ctx *arch)
+fu_archive_write_ctx_free(_archive_write_ctx *arch)
 {
 	archive_write_close(arch);
 	archive_write_free(arch);
 }
 
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(_archive_write_ctx, _archive_write_ctx_free)
+G_DEFINE_AUTOPTR_CLEANUP_FUNC(_archive_write_ctx, fu_archive_write_ctx_free)
 
 typedef struct archive_entry _archive_entry_ctx;
 
 static void
-_archive_entry_ctx_free(_archive_entry_ctx *entry)
+fu_archive_entry_ctx_free(_archive_entry_ctx *entry)
 {
 	archive_entry_free(entry);
 }
 
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(_archive_entry_ctx, _archive_entry_ctx_free)
+G_DEFINE_AUTOPTR_CLEANUP_FUNC(_archive_entry_ctx, fu_archive_entry_ctx_free)
 
 static void
 fu_archive_set_format(_archive_write_ctx *arch, FuArchiveFormat format)
@@ -421,37 +240,29 @@ fu_archive_set_compression(_archive_write_ctx *arch, FuArchiveCompression compre
 		archive_write_add_filter_zstd(arch);
 #endif
 }
-#endif
 
-static gboolean
-fu_archive_load(FuArchive *self, GBytes *blob, FuArchiveFlags flags, GError **error)
+static _archive_read_ctx *
+fu_archive_read_new(GError **error)
 {
-#ifdef HAVE_LIBARCHIVE
-	int r;
 	g_autoptr(_archive_read_ctx) arch = NULL;
 
-	/* decompress anything matching either glob */
 	arch = archive_read_new();
 	if (arch == NULL) {
 		g_set_error_literal(error,
-				    G_IO_ERROR,
-				    G_IO_ERROR_NOT_SUPPORTED,
+				    FWUPD_ERROR,
+				    FWUPD_ERROR_NOT_SUPPORTED,
 				    "libarchive startup failed");
-		return FALSE;
+		return NULL;
 	}
 	archive_read_support_format_all(arch);
 	archive_read_support_filter_all(arch);
-	r = archive_read_open_memory(arch,
-				     (void *)g_bytes_get_data(blob, NULL),
-				     (size_t)g_bytes_get_size(blob));
-	if (r != 0) {
-		g_set_error(error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_NOT_SUPPORTED,
-			    "cannot open: %s",
-			    archive_error_string(arch));
-		return FALSE;
-	}
+	return g_steal_pointer(&arch);
+}
+
+static gboolean
+fu_archive_read(FuArchive *self, _archive_read_ctx *arch, FuArchiveFlags flags, GError **error)
+{
+	int r;
 	while (TRUE) {
 		const gchar *fn;
 		gint64 bufsz;
@@ -466,8 +277,8 @@ fu_archive_load(FuArchive *self, GBytes *blob, FuArchiveFlags flags, GError **er
 			break;
 		if (r != ARCHIVE_OK) {
 			g_set_error(error,
-				    G_IO_ERROR,
-				    G_IO_ERROR_FAILED,
+				    FWUPD_ERROR,
+				    FWUPD_ERROR_INVALID_DATA,
 				    "cannot read header: %s",
 				    archive_error_string(arch));
 			return FALSE;
@@ -477,11 +288,19 @@ fu_archive_load(FuArchive *self, GBytes *blob, FuArchiveFlags flags, GError **er
 		fn = archive_entry_pathname(entry);
 		if (fn == NULL)
 			continue;
+		if (!archive_entry_size_is_set(entry)) {
+			g_set_error(error,
+				    FWUPD_ERROR,
+				    FWUPD_ERROR_INVALID_DATA,
+				    "%s entry does not have size set",
+				    fn);
+			return FALSE;
+		}
 		bufsz = archive_entry_size(entry);
 		if (bufsz > 1024 * 1024 * 1024) {
 			g_set_error_literal(error,
-					    G_IO_ERROR,
-					    G_IO_ERROR_FAILED,
+					    FWUPD_ERROR,
+					    FWUPD_ERROR_NOT_SUPPORTED,
 					    "cannot read huge files");
 			return FALSE;
 		}
@@ -489,16 +308,16 @@ fu_archive_load(FuArchive *self, GBytes *blob, FuArchiveFlags flags, GError **er
 		rc = archive_read_data(arch, buf, (gsize)bufsz);
 		if (rc < 0) {
 			g_set_error(error,
-				    G_IO_ERROR,
-				    G_IO_ERROR_FAILED,
+				    FWUPD_ERROR,
+				    FWUPD_ERROR_READ,
 				    "cannot read data: %s",
 				    archive_error_string(arch));
 			return FALSE;
 		}
 		if (rc != bufsz) {
 			g_set_error(error,
-				    G_IO_ERROR,
-				    G_IO_ERROR_FAILED,
+				    FWUPD_ERROR,
+				    FWUPD_ERROR_READ,
 				    "read %" G_GSSIZE_FORMAT " of %" G_GINT64_FORMAT,
 				    rc,
 				    bufsz);
@@ -516,14 +335,8 @@ fu_archive_load(FuArchive *self, GBytes *blob, FuArchiveFlags flags, GError **er
 
 	/* success */
 	return TRUE;
-#else
-	g_set_error_literal(error,
-			    FWUPD_ERROR,
-			    FWUPD_ERROR_NOT_SUPPORTED,
-			    "missing libarchive support");
-	return FALSE;
-#endif
 }
+#endif
 
 /**
  * fu_archive_new:
@@ -542,13 +355,173 @@ fu_archive_load(FuArchive *self, GBytes *blob, FuArchiveFlags flags, GError **er
 FuArchive *
 fu_archive_new(GBytes *data, FuArchiveFlags flags, GError **error)
 {
+#ifdef HAVE_LIBARCHIVE
 	g_autoptr(FuArchive) self = g_object_new(FU_TYPE_ARCHIVE, NULL);
+
 	g_return_val_if_fail(error == NULL || *error == NULL, NULL);
+
 	if (data != NULL) {
-		if (!fu_archive_load(self, data, flags, error))
+		int r;
+		g_autoptr(_archive_read_ctx) arch = NULL;
+
+		arch = fu_archive_read_new(error);
+		if (arch == NULL)
+			return NULL;
+		r = archive_read_open_memory(arch,
+					     (void *)g_bytes_get_data(data, NULL),
+					     (size_t)g_bytes_get_size(data));
+		if (r != 0) {
+			g_set_error(error,
+				    FWUPD_ERROR,
+				    FWUPD_ERROR_NOT_SUPPORTED,
+				    "cannot open: %s",
+				    archive_error_string(arch));
+			return NULL;
+		}
+		if (!fu_archive_read(self, arch, flags, error))
 			return NULL;
 	}
 	return g_steal_pointer(&self);
+#else
+	g_set_error_literal(error,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_NOT_SUPPORTED,
+			    "missing libarchive support");
+	return NULL;
+#endif
+}
+
+#ifdef HAVE_LIBARCHIVE
+typedef struct {
+	GInputStream *stream;
+	guint8 buf[0x8000];
+} FuArchiveStreamHelper;
+
+static gint64
+fu_archive_skip_cb(struct archive *arch, void *client_data, off_t request)
+{
+	FuArchiveStreamHelper *helper = (FuArchiveStreamHelper *)client_data;
+	gssize cnt;
+	g_autoptr(GError) error_local = NULL;
+
+	cnt = g_input_stream_skip(helper->stream, request, NULL, &error_local);
+	if (cnt < 0) {
+		archive_set_error(arch,
+				  ARCHIVE_FAILED,
+				  "failed to read from stream: %s",
+				  error_local->message);
+		return -1;
+	}
+	return cnt;
+}
+
+static gssize
+fu_archive_read_cb(struct archive *arch, void *client_data, const void **buffer)
+{
+	FuArchiveStreamHelper *helper = (FuArchiveStreamHelper *)client_data;
+	gssize cnt;
+	g_autoptr(GError) error_local = NULL;
+
+	cnt = g_input_stream_read(helper->stream,
+				  helper->buf,
+				  sizeof(helper->buf),
+				  NULL,
+				  &error_local);
+	if (cnt < 0) {
+		archive_set_error(arch,
+				  ARCHIVE_FAILED,
+				  "failed to read from stream: %s",
+				  error_local->message);
+		return -1;
+	}
+	if (cnt > 0)
+		*buffer = helper->buf;
+	return cnt;
+}
+
+static GSeekType
+fu_archive_whence_to_seek_type(gint whence)
+{
+	if (whence == SEEK_SET)
+		return G_SEEK_SET;
+	if (whence == SEEK_END)
+		return G_SEEK_END;
+	return G_SEEK_CUR;
+}
+
+static gint64
+fu_archive_seek_cb(struct archive *arch, void *client_data, gint64 offset, gint whence)
+{
+	FuArchiveStreamHelper *helper = (FuArchiveStreamHelper *)client_data;
+	g_autoptr(GError) error_local = NULL;
+	if (!g_seekable_seek(G_SEEKABLE(helper->stream),
+			     offset,
+			     fu_archive_whence_to_seek_type(whence),
+			     NULL,
+			     &error_local)) {
+		archive_set_error(arch,
+				  ARCHIVE_FAILED,
+				  "failed to read from stream: %s",
+				  error_local->message);
+		return -1;
+	}
+	return g_seekable_tell(G_SEEKABLE(helper->stream));
+}
+#endif
+
+/**
+ * fu_archive_new_stream:
+ * @stream: a #GInputStream
+ * @flags: archive flags, e.g. %FU_ARCHIVE_FLAG_NONE
+ * @error: (nullable): optional return location for an error
+ *
+ * Parses @stream as an archive and decompresses all files to memory blobs.
+ *
+ * Returns: a #FuArchive, or %NULL if the archive was invalid in any way.
+ *
+ * Since: 2.0.0
+ **/
+FuArchive *
+fu_archive_new_stream(GInputStream *stream, FuArchiveFlags flags, GError **error)
+{
+#ifdef HAVE_LIBARCHIVE
+	g_autoptr(FuArchive) self = g_object_new(FU_TYPE_ARCHIVE, NULL);
+	g_autoptr(_archive_read_ctx) arch = NULL;
+	FuArchiveStreamHelper helper = {.stream = stream};
+	int r;
+
+	g_return_val_if_fail(G_INPUT_STREAM(stream), NULL);
+	g_return_val_if_fail(error == NULL || *error == NULL, NULL);
+
+	if (!g_seekable_seek(G_SEEKABLE(stream), 0x0, G_SEEK_SET, NULL, error))
+		return NULL;
+
+	arch = fu_archive_read_new(error);
+	if (arch == NULL)
+		return NULL;
+	archive_read_set_seek_callback(arch, fu_archive_seek_cb);
+	archive_read_set_read_callback(arch, fu_archive_read_cb);
+	archive_read_set_skip_callback(arch, fu_archive_skip_cb);
+	archive_read_set_callback_data(arch, &helper);
+	r = archive_read_open1(arch);
+	if (r != 0) {
+		g_set_error(error,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_NOT_SUPPORTED,
+			    "cannot open: %s",
+			    archive_error_string(arch));
+		return NULL;
+	}
+	if (!fu_archive_read(self, arch, flags, error))
+		return NULL;
+	return g_steal_pointer(&self);
+#else
+	g_set_error_literal(error,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_NOT_SUPPORTED,
+			    "missing libarchive support");
+	return NULL;
+#endif
 }
 
 #ifdef HAVE_LIBARCHIVE
@@ -574,7 +547,7 @@ fu_archive_write_cb(struct archive *arch, void *user_data, const void *buf, gsiz
  *
  * Since: 1.8.1
  **/
-GBytes *
+GByteArray *
 fu_archive_write(FuArchive *self,
 		 FuArchiveFormat format,
 		 FuArchiveCompression compression,
@@ -595,8 +568,8 @@ fu_archive_write(FuArchive *self,
 #ifndef HAVE_LIBARCHIVE_WRITE_ADD_COMPRESSION_ZSTD
 	if (compression == FU_ARCHIVE_COMPRESSION_ZSTD) {
 		g_set_error_literal(error,
-				    G_IO_ERROR,
-				    G_IO_ERROR_NOT_SUPPORTED,
+				    FWUPD_ERROR,
+				    FWUPD_ERROR_NOT_SUPPORTED,
 				    "archive_write_add_filter_zstd() not supported");
 		return NULL;
 	}
@@ -606,8 +579,8 @@ fu_archive_write(FuArchive *self,
 	arch = archive_write_new();
 	if (arch == NULL) {
 		g_set_error_literal(error,
-				    G_IO_ERROR,
-				    G_IO_ERROR_NOT_SUPPORTED,
+				    FWUPD_ERROR,
+				    FWUPD_ERROR_NOT_SUPPORTED,
 				    "libarchive startup failed");
 		return NULL;
 	}
@@ -621,8 +594,8 @@ fu_archive_write(FuArchive *self,
 	r = archive_write_open(arch, blob, NULL, fu_archive_write_cb, NULL);
 	if (r != 0) {
 		g_set_error(error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_NOT_SUPPORTED,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_NOT_SUPPORTED,
 			    "cannot open: %s",
 			    archive_error_string(arch));
 		return NULL;
@@ -644,8 +617,8 @@ fu_archive_write(FuArchive *self,
 		r = archive_write_header(arch, entry);
 		if (r != 0) {
 			g_set_error(error,
-				    G_IO_ERROR,
-				    G_IO_ERROR_NOT_SUPPORTED,
+				    FWUPD_ERROR,
+				    FWUPD_ERROR_NOT_SUPPORTED,
 				    "cannot write header: %s",
 				    archive_error_string(arch));
 			return NULL;
@@ -655,8 +628,8 @@ fu_archive_write(FuArchive *self,
 					g_bytes_get_size(bytes));
 		if (rc < 0) {
 			g_set_error(error,
-				    G_IO_ERROR,
-				    G_IO_ERROR_FAILED,
+				    FWUPD_ERROR,
+				    FWUPD_ERROR_WRITE,
 				    "cannot write data: %s",
 				    archive_error_string(arch));
 			return NULL;
@@ -666,15 +639,15 @@ fu_archive_write(FuArchive *self,
 	r = archive_write_close(arch);
 	if (r != 0) {
 		g_set_error(error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_NOT_SUPPORTED,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_NOT_SUPPORTED,
 			    "cannot close: %s",
 			    archive_error_string(arch));
 		return NULL;
 	}
 
 	/* success */
-	return g_byte_array_free_to_bytes(g_steal_pointer(&blob));
+	return g_steal_pointer(&blob);
 #else
 	g_set_error_literal(error,
 			    FWUPD_ERROR,

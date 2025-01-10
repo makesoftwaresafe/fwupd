@@ -1,7 +1,8 @@
-if get_option('plugin_emmc').require(gudev.found(),
-    error_message: 'gudev is needed for plugin_emmc').allowed()
+if get_option('plugin_emmc').require(enable_udev,
+    error_message: 'udev is needed for plugin_emmc').allowed()
 
 cargs = ['-DG_LOG_DOMAIN="FuPluginEmmc"']
+plugins += {meson.current_source_dir().split('/')[-1]: true}
 
 plugin_quirks += files('emmc.quirk')
 plugin_builtins += static_library('fu_plugin_emmc',
@@ -14,4 +15,7 @@ plugin_builtins += static_library('fu_plugin_emmc',
   c_args: cargs,
   dependencies: plugin_deps,
 )
+
+enumeration_data += files('tests/sandisk-da4064-setup.json')
+device_tests += files('tests/sandisk-da4064.json')
 endif

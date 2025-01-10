@@ -1,12 +1,10 @@
 /*
- * Copyright (C) 2017 Richard Hughes <richard@hughsie.com>
+ * Copyright 2017 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #include "config.h"
-
-#include <fwupdplugin.h>
 
 #include <string.h>
 
@@ -63,11 +61,7 @@ fu_redfish_backend_request_new(FuRedfishBackend *self)
 {
 	FuRedfishRequest *request = g_object_new(FU_TYPE_REDFISH_REQUEST, NULL);
 	CURL *curl;
-#ifdef HAVE_LIBCURL_7_62_0
 	CURLU *uri;
-#else
-	g_autofree gchar *uri_base = NULL;
-#endif
 	g_autofree gchar *user_agent = NULL;
 	g_autofree gchar *port = g_strdup_printf("%u", self->port);
 
@@ -77,17 +71,11 @@ fu_redfish_backend_request_new(FuRedfishBackend *self)
 
 	/* set up defaults */
 	curl = fu_redfish_request_get_curl(request);
-#ifdef HAVE_LIBCURL_7_62_0
 	uri = fu_redfish_request_get_uri(request);
 	(void)curl_url_set(uri, CURLUPART_SCHEME, self->use_https ? "https" : "http", 0);
 	(void)curl_url_set(uri, CURLUPART_HOST, self->hostname, 0);
 	(void)curl_url_set(uri, CURLUPART_PORT, port, 0);
 	(void)curl_easy_setopt(curl, CURLOPT_CURLU, uri);
-#else
-	uri_base =
-	    g_strdup_printf("%s://%s:%s", self->use_https ? "https" : "http", self->hostname, port);
-	fu_redfish_request_set_uri_base(request, uri_base);
-#endif
 
 	/* since DSP0266 makes Basic Authorization a requirement,
 	 * it is safe to use Basic Auth for all implementations */
@@ -348,7 +336,10 @@ fu_redfish_backend_set_update_uri_path(FuRedfishBackend *self, const gchar *upda
 }
 
 static gboolean
-fu_redfish_backend_setup(FuBackend *backend, FuProgress *progress, GError **error)
+fu_redfish_backend_setup(FuBackend *backend,
+			 FuBackendSetupFlags flags,
+			 FuProgress *progress,
+			 GError **error)
 {
 	FuRedfishBackend *self = FU_REDFISH_BACKEND(backend);
 	JsonObject *json_obj;
@@ -481,17 +472,17 @@ static void
 fu_redfish_backend_to_string(FuBackend *backend, guint idt, GString *str)
 {
 	FuRedfishBackend *self = FU_REDFISH_BACKEND(backend);
-	fu_string_append(str, idt, "Hostname", self->hostname);
-	fu_string_append(str, idt, "Username", self->username);
-	fu_string_append_kb(str, idt, "Password", self->password != NULL);
-	fu_string_append_ku(str, idt, "Port", self->port);
-	fu_string_append(str, idt, "UpdateUriPath", self->update_uri_path);
-	fu_string_append(str, idt, "PushUriPath", self->push_uri_path);
-	fu_string_append_kb(str, idt, "UseHttps", self->use_https);
-	fu_string_append_kb(str, idt, "Cacheck", self->cacheck);
-	fu_string_append_kb(str, idt, "WildcardTargets", self->wildcard_targets);
-	fu_string_append_kx(str, idt, "MaxImageSize", self->max_image_size);
-	fu_string_append(str, idt, "DeviceGType", g_type_name(self->device_gtype));
+	fwupd_codec_string_append(str, idt, "Hostname", self->hostname);
+	fwupd_codec_string_append(str, idt, "Username", self->username);
+	fwupd_codec_string_append_bool(str, idt, "Password", self->password != NULL);
+	fwupd_codec_string_append_int(str, idt, "Port", self->port);
+	fwupd_codec_string_append(str, idt, "UpdateUriPath", self->update_uri_path);
+	fwupd_codec_string_append(str, idt, "PushUriPath", self->push_uri_path);
+	fwupd_codec_string_append_bool(str, idt, "UseHttps", self->use_https);
+	fwupd_codec_string_append_bool(str, idt, "Cacheck", self->cacheck);
+	fwupd_codec_string_append_bool(str, idt, "WildcardTargets", self->wildcard_targets);
+	fwupd_codec_string_append_hex(str, idt, "MaxImageSize", self->max_image_size);
+	fwupd_codec_string_append(str, idt, "DeviceGType", g_type_name(self->device_gtype));
 }
 
 static void
@@ -515,11 +506,11 @@ static void
 fu_redfish_backend_class_init(FuRedfishBackendClass *klass)
 {
 	GObjectClass *object_class = G_OBJECT_CLASS(klass);
-	FuBackendClass *klass_backend = FU_BACKEND_CLASS(klass);
-	klass_backend->coldplug = fu_redfish_backend_coldplug;
-	klass_backend->setup = fu_redfish_backend_setup;
-	klass_backend->invalidate = fu_redfish_backend_invalidate;
-	klass_backend->to_string = fu_redfish_backend_to_string;
+	FuBackendClass *backend_class = FU_BACKEND_CLASS(klass);
+	backend_class->coldplug = fu_redfish_backend_coldplug;
+	backend_class->setup = fu_redfish_backend_setup;
+	backend_class->invalidate = fu_redfish_backend_invalidate;
+	backend_class->to_string = fu_redfish_backend_to_string;
 	object_class->finalize = fu_redfish_backend_finalize;
 }
 
@@ -536,7 +527,6 @@ fu_redfish_backend_init(FuRedfishBackend *self)
 	curl_share_setopt(self->curlsh, CURLSHOPT_SHARE, CURL_LOCK_DATA_COOKIE);
 	curl_share_setopt(self->curlsh, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
 	curl_share_setopt(self->curlsh, CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION);
-	curl_share_setopt(self->curlsh, CURLSHOPT_SHARE, CURL_LOCK_DATA_CONNECT);
 }
 
 FuRedfishBackend *

@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2023 Richard Hughes <richard@hughsie.com>
+ * Copyright 2023 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #pragma once
@@ -18,10 +18,10 @@ struct _FuAcpiTableClass {
 FuFirmware *
 fu_acpi_table_new(void);
 guint8
-fu_acpi_table_get_revision(FuAcpiTable *self);
+fu_acpi_table_get_revision(FuAcpiTable *self) G_GNUC_NON_NULL(1);
 const gchar *
-fu_acpi_table_get_oem_id(FuAcpiTable *self);
+fu_acpi_table_get_oem_id(FuAcpiTable *self) G_GNUC_NON_NULL(1);
 const gchar *
-fu_acpi_table_get_oem_table_id(FuAcpiTable *self);
+fu_acpi_table_get_oem_table_id(FuAcpiTable *self) G_GNUC_NON_NULL(1);
 guint32
-fu_acpi_table_get_oem_revision(FuAcpiTable *self);
+fu_acpi_table_get_oem_revision(FuAcpiTable *self) G_GNUC_NON_NULL(1);

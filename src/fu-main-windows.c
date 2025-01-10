@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2022 Richard Hughes <richard@hughsie.com>
+ * Copyright 2022 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  *
  * - sc create fwupd start="auto" binPath="C:\Program Files (x86)\fwupd\bin\fwupd.exe"
  * - sc delete fwupd
@@ -49,7 +49,9 @@ static gboolean
 fu_main_svc_control_stop_cb(gpointer user_data)
 {
 	FuDaemon *daemon = FU_DAEMON(user_data);
-	fu_daemon_stop(daemon);
+	g_autoptr(GError) error = NULL;
+	if (!fu_daemon_stop(daemon, &error))
+		g_warning("Failed to stop daemon, will wait: %s\n", error->message);
 	return G_SOURCE_REMOVE;
 }
 
@@ -90,12 +92,15 @@ fu_main_svc_main_cb(DWORD dwArgc, LPSTR *lpszArgv)
 
 	/* set up the daemon, which includes coldplugging devices -- then run it */
 	fu_main_svc_report_status(SERVICE_START_PENDING, NO_ERROR, 1000);
-	if (!fu_daemon_setup(daemon, FWUPD_DBUS_P2P_SOCKET_ADDRESS, &error)) {
+	if (!fu_daemon_setup(daemon, FWUPD_DBUS_SOCKET_ADDRESS, &error)) {
 		g_warning("Failed to load daemon: %s", error->message);
 		return;
 	}
 	fu_main_svc_report_status(SERVICE_RUNNING, NO_ERROR, 0);
-	fu_daemon_start(daemon);
+	if (!fu_daemon_start(daemon, &error)) {
+		g_warning("Failed to start daemon: %s\n", error->message);
+		return;
+	}
 	fu_main_svc_report_status(SERVICE_STOPPED, NO_ERROR, 0);
 }
 
@@ -114,11 +119,14 @@ fu_main_console(int argc, char *argv[])
 	}
 
 	/* set up the daemon, which includes coldplugging devices -- then run it */
-	if (!fu_daemon_setup(daemon, FWUPD_DBUS_P2P_SOCKET_ADDRESS, &error)) {
+	if (!fu_daemon_setup(daemon, FWUPD_DBUS_SOCKET_ADDRESS, &error)) {
 		g_printerr("Failed to load daemon: %s\n", error->message);
 		return EXIT_FAILURE;
 	}
-	fu_daemon_start(daemon);
+	if (!fu_daemon_start(daemon, &error)) {
+		g_printerr("Failed to start daemon: %s\n", error->message);
+		return EXIT_FAILURE;
+	}
 
 	/* success */
 	g_message("Daemon ready for requests");

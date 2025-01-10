@@ -1,14 +1,10 @@
 if build_standalone and get_option('lvfs') != 'false'
   con3 = configuration_data()
+  con3.set('compression', lvfs_metadata_format)
   if get_option('lvfs') == 'disabled'
     con3.set('enabled', 'false')
   else
     con3.set('enabled', 'true')
-  endif
-  if libxmlb.version().version_compare('>= 0.3.3')
-    con3.set('compression', 'xz')
-  else
-    con3.set('compression', 'gz')
   endif
   configure_file(
     input: 'lvfs.conf',
@@ -55,7 +51,7 @@ configure_file(
   input: 'vendor.conf',
   output: 'vendor.conf',
   configuration: con2,
-  install: true,
+  install: get_option('vendor_metadata'),
   install_dir: join_paths(sysconfdir, 'fwupd', 'remotes.d'),
 )
 configure_file(

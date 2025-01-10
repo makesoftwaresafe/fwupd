@@ -1,10 +1,9 @@
-#!/usr/bin/python3
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python3
 #
-# Copyright (C) 2017 Peter Jones <pjones@redhat.com>
-# Copyright (C) 2020 Richard Hughes <richard@hughsie.com>
+# Copyright 2017 Peter Jones <pjones@redhat.com>
+# Copyright 2020 Richard Hughes <richard@hughsie.com>
 #
-# SPDX-License-Identifier: LGPL-2.1+
+# SPDX-License-Identifier: LGPL-2.1-or-later
 #
 # pylint: disable=wrong-import-position,too-many-locals,unused-argument,too-many-statements
 # pylint: disable=invalid-name,too-many-instance-attributes,missing-module-docstring
@@ -29,7 +28,7 @@ from gi.repository import Pango, PangoCairo
 
 
 def languages(podir: str):
-    for x in open(os.path.join(podir, "LINGUAS"), "r").readlines():
+    for x in open(os.path.join(podir, "LINGUAS")).readlines():
         yield x.strip()
     yield "en"
 
@@ -41,7 +40,7 @@ class PotFile:
             self.parse(fn)
 
     def parse(self, fn: str) -> None:
-        with open(fn, "r") as f:
+        with open(fn) as f:
             lang_en: Optional[str] = None
             for line in f.read().split("\n"):
                 if not line:
@@ -62,7 +61,6 @@ class PotFile:
 
 
 def _cairo_surface_write_to_bmp(img: cairo.ImageSurface) -> bytes:
-
     data = bytes(img.get_data())
     return (
         b"BM"
@@ -89,16 +87,14 @@ def _cairo_surface_write_to_bmp(img: cairo.ImageSurface) -> bytes:
 
 
 def main(args) -> int:
-
     # open output archive
     with tarfile.open(args.out, "w:xz", preset=8) as tar:
-
         for lang in languages(args.podir):
             # these are the 1.6:1 of some common(ish) screen widths
             if lang == "en":
                 label_translated: str = args.label
             else:
-                potfile = PotFile(os.path.join(args.podir, "{}.po".format(lang)))
+                potfile = PotFile(os.path.join(args.podir, f"{lang}.po"))
                 try:
                     label_translated = potfile.msgs[args.label]
                 except KeyError:
@@ -123,9 +119,8 @@ def main(args) -> int:
                 (5688, 3200),
                 (7680, 4320),
             ):
-
                 # generate PangoLanguage
-                font_desc = "Sans %.2fpx" % (height / 32,)
+                font_desc = f"Sans {height / 32:.2f}px"
                 fd = Pango.FontDescription(font_desc)
                 font_option = cairo.FontOptions()
                 font_option.set_antialias(cairo.ANTIALIAS_SUBPIXEL)
@@ -202,7 +197,7 @@ def main(args) -> int:
                 # convert to BMP and add to archive
                 with io.BytesIO() as io_bmp:
                     io_bmp.write(_cairo_surface_write_to_bmp(img))
-                    filename = "fwupd-{}-{}-{}.bmp".format(lang, width, height)
+                    filename = f"fwupd-{lang}-{width}-{height}.bmp"
                     tarinfo = tarfile.TarInfo(filename)
                     tarinfo.size = io_bmp.tell()
                     io_bmp.seek(0)

@@ -8,15 +8,19 @@ fwupd_version_h = configure_file(
   configuration: conf
 )
 
+base_dir = 'fwupd-' + libfwupd_lt_current
+
 install_headers(
   'fwupd.h',
-  subdir: 'fwupd-1',
+  subdir: base_dir,
 )
 
 install_headers([
+    'fwupd-build.h',
     'fwupd-client.h',
     'fwupd-client-sync.h',
     'fwupd-common.h',
+    'fwupd-codec.h',
     'fwupd-device.h',
     'fwupd-enums.h',
     'fwupd-error.h',
@@ -29,12 +33,11 @@ install_headers([
     'fwupd-plugin.h',
     fwupd_version_h,
   ],
-  subdir: 'fwupd-1/libfwupd',
+  subdir: join_paths(base_dir, 'libfwupd'),
 )
 
 libfwupd_deps = [
     giounix,
-    gmodule,
     libjcat,
     libjsonglib,
     libcurl,
@@ -44,6 +47,7 @@ libfwupd_src = [
   'fwupd-client.c',
   'fwupd-client-sync.c',
   'fwupd-common.c',         # fuzzing
+  'fwupd-codec.c',      # fuzzing
   'fwupd-device.c',         # fuzzing
   'fwupd-enums.c',          # fuzzing
   'fwupd-error.c',          # fuzzing
@@ -84,8 +88,8 @@ libfwupd_dep = declare_dependency(
 pkgg = import('pkgconfig')
 pkgg.generate(
   fwupd,
-  requires: [ 'gio-2.0' ],
-  subdirs: 'fwupd-1',
+  requires: [ 'gio-2.0', 'json-glib-1.0' ],
+  subdirs: base_dir,
   version: meson.project_version(),
   name: 'fwupd',
   filebase: 'fwupd',
@@ -106,6 +110,8 @@ if introspection.allowed()
       'fwupd-common.c',
       'fwupd-common.h',
       'fwupd-common-private.h',
+      'fwupd-codec.c',
+      'fwupd-codec.h',
       'fwupd-device.c',
       'fwupd-device.h',
       'fwupd-device-private.h',
@@ -116,22 +122,18 @@ if introspection.allowed()
       'fwupd-error.h',
       'fwupd-bios-setting.c',
       'fwupd-bios-setting.h',
-      'fwupd-bios-setting-private.h',
       'fwupd-security-attr.c',
       'fwupd-security-attr.h',
       'fwupd-security-attr-private.h',
       'fwupd-release.c',
       'fwupd-release.h',
-      'fwupd-release-private.h',
       'fwupd-plugin.c',
       'fwupd-plugin.h',
-      'fwupd-plugin-private.h',
       'fwupd-remote.c',
       'fwupd-remote.h',
       'fwupd-remote-private.h',
       'fwupd-report.c',
       'fwupd-report.h',
-      'fwupd-report-private.h',
       'fwupd-request.c',
       'fwupd-request.h',
       'fwupd-request-private.h',
@@ -141,7 +143,7 @@ if introspection.allowed()
     nsversion: '2.0',
     namespace: 'Fwupd',
     symbol_prefix: 'fwupd',
-    identifier_prefix: 'Fwupd',
+    identifier_prefix: ['Fwupd', 'fwupd'],
     export_packages: 'fwupd',
     header: 'fwupd.h',
     dependencies: fwupd_gir_deps,
@@ -171,8 +173,7 @@ if introspection.allowed()
     input: fwupd_gir[0],
     output: 'fwupd.map',
     command: [
-      python3,
-      join_paths(meson.project_source_root(), 'contrib', 'generate-version-script.py'),
+      generate_version_script,
       'LIBFWUPD',
       '@INPUT@',
       '@OUTPUT@',
@@ -193,7 +194,6 @@ if get_option('tests')
   env.set('G_TEST_BUILDDIR', meson.current_build_dir())
   e = executable(
     'fwupd-self-test',
-    metadata_xml_gz_jcat,
     sources: [
       'fwupd-self-test.c'
     ],

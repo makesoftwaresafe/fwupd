@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2021 Richard Hughes <richard@hughsie.com>
+ * Copyright 2021 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #pragma once
@@ -18,4 +18,4 @@ struct _FuIfdFirmwareClass {
 FuFirmware *
 fu_ifd_firmware_new(void);
 gboolean
-fu_ifd_firmware_check_jedec_cmd(FuIfdFirmware *self, guint8 cmd);
+fu_ifd_firmware_check_jedec_cmd(FuIfdFirmware *self, guint8 cmd) G_GNUC_NON_NULL(1);

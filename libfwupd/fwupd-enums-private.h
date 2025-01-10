@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2016 Richard Hughes <richard@hughsie.com>
+ * Copyright 2016 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #pragma once
@@ -139,6 +139,14 @@ G_BEGIN_DECLS
  **/
 #define FWUPD_RESULT_KEY_FLAGS "Flags"
 /**
+ * FWUPD_RESULT_KEY_REQUEST_FLAGS:
+ *
+ * Result key to represent RequestFlags
+ *
+ * The D-Bus type signature string is 't' i.e. a unsigned 64 bit integer.
+ **/
+#define FWUPD_RESULT_KEY_REQUEST_FLAGS "RequestFlags"
+/**
  * FWUPD_RESULT_KEY_FLASHES_LEFT:
  *
  * Result key to represent FlashesLeft
@@ -186,6 +194,14 @@ G_BEGIN_DECLS
  * The D-Bus type signature string is 'u' i.e. a unsigned 32 bit integer.
  **/
 #define FWUPD_RESULT_KEY_HSI_RESULT_FALLBACK "HsiResultFallback"
+/**
+ * FWUPD_RESULT_KEY_HSI_RESULT_SUCCESS:
+ *
+ * Result key to represent the desired HsiResult
+ *
+ * The D-Bus type signature string is 'u' i.e. a unsigned 32 bit integer.
+ **/
+#define FWUPD_RESULT_KEY_HSI_RESULT_SUCCESS "HsiResultSuccess"
 /**
  * FWUPD_RESULT_KEY_INSTALL_DURATION:
  *
@@ -598,6 +614,22 @@ G_BEGIN_DECLS
  * The D-Bus type signature string is 'b' i.e. a boolean.
  **/
 #define FWUPD_RESULT_KEY_BIOS_SETTING_READ_ONLY "BiosSettingReadOnly"
+/**
+ * FWUPD_RESULT_KEY_KERNEL_CURRENT_VALUE:
+ *
+ * Result key to represent the current kernel setting.
+ *
+ * The D-Bus type signature string is 's' i.e. a string.
+ **/
+#define FWUPD_RESULT_KEY_KERNEL_CURRENT_VALUE "KernelCurrentValue"
+/**
+ * FWUPD_RESULT_KEY_KERNEL_TARGET_VALUE:
+ *
+ * Result key to represent the target kernel setting.
+ *
+ * The D-Bus type signature string is 's' i.e. a string.
+ **/
+#define FWUPD_RESULT_KEY_KERNEL_TARGET_VALUE "KernelTargetValue"
 /**
  * FWUPD_RESULT_KEY_DISTRO_ID:
  *

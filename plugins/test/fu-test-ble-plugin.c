@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2021 Richard Hughes <richard@hughsie.com>
+ * Copyright 2021 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #include "config.h"
@@ -18,6 +18,7 @@ G_DEFINE_TYPE(FuTestBlePlugin, fu_test_ble_plugin, FU_TYPE_PLUGIN)
 static void
 fu_test_ble_plugin_init(FuTestBlePlugin *self)
 {
+	fu_plugin_add_flag(FU_PLUGIN(self), FWUPD_PLUGIN_FLAG_TEST_ONLY);
 }
 
 static void

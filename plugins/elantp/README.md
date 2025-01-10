@@ -29,7 +29,7 @@ Additionally another instance ID is added which corresponds to the module ID:
 
 These devices also use custom GUID values for the IC configuration, e.g.
 
-* `ELANTP\ICTYPE_09`
+* `ELANTP\ICTYPE_09` (only-quirk)
 
  Additionally another instance ID is added which corresponds to the IC type & module ID:
 
@@ -81,3 +81,11 @@ This plugin requires ioctl access to `HIDIOCSFEATURE` and `HIDIOCGFEATURE`.
 ## Version Considerations
 
 This plugin has been available since fwupd version `1.5.0`.
+
+## Owners
+
+Anyone can submit a pull request to modify this plugin, but the following people should be
+consulted before making major or functional changes:
+
+* Jingle Wu: @jinglewu
+* Josh Chen: @josh-chen-elan

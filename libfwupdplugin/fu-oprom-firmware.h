@@ -1,8 +1,8 @@
 /*
- * Copyright (C) 2022 Richard Hughes <richard@hughsie.com>
- * Copyright (C) 2022 Intel
+ * Copyright 2022 Richard Hughes <richard@hughsie.com>
+ * Copyright 2022 Intel
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #pragma once
@@ -47,8 +47,8 @@ FuFirmware *
 fu_oprom_firmware_new(void);
 
 guint16
-fu_oprom_firmware_get_machine_type(FuOpromFirmware *self);
+fu_oprom_firmware_get_machine_type(FuOpromFirmware *self) G_GNUC_NON_NULL(1);
 guint16
-fu_oprom_firmware_get_subsystem(FuOpromFirmware *self);
+fu_oprom_firmware_get_subsystem(FuOpromFirmware *self) G_GNUC_NON_NULL(1);
 guint16
-fu_oprom_firmware_get_compression_type(FuOpromFirmware *self);
+fu_oprom_firmware_get_compression_type(FuOpromFirmware *self) G_GNUC_NON_NULL(1);

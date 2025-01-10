@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2018 Richard Hughes <richard@hughsie.com>
+ * Copyright 2018 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #include "config.h"
@@ -25,7 +25,7 @@ G_DEFINE_TYPE(FuWacModuleBluetooth, fu_wac_module_bluetooth, FU_TYPE_WAC_MODULE)
 
 typedef struct {
 	guint8 preamble[7];
-	guint8 addr[3];
+	guint32 addr;
 	guint8 crc;
 	guint8 cdata[FU_WAC_MODULE_BLUETOOTH_PAYLOAD_SZ];
 } FuWacModuleBluetoothBlockData;
@@ -58,7 +58,7 @@ fu_wac_module_bluetooth_calculate_crc_byte(guint8 *crc, guint8 data)
 	for (guint i = 0; i < 8; i++) {
 		if (r[i] == 0)
 			continue;
-		*crc |= (1 << i);
+		FU_BIT_SET(*crc, i);
 	}
 }
 
@@ -89,10 +89,8 @@ fu_wac_module_bluetooth_parse_blocks(const guint8 *data,
 			continue;
 
 		bd = g_new0(FuWacModuleBluetoothBlockData, 1);
-		memcpy(bd->preamble, preamble, sizeof(preamble));
-		bd->addr[0] = (addr >> 16) & 0xff;
-		bd->addr[1] = (addr >> 8) & 0xff;
-		bd->addr[2] = addr & 0xff;
+		bd->addr = addr;
+		memcpy(bd->preamble, preamble, sizeof(preamble)); /* nocheck:blocked */
 		memset(bd->cdata, 0xff, FU_WAC_MODULE_BLUETOOTH_PAYLOAD_SZ);
 
 		/* if file is not in multiples of payload size */
@@ -155,7 +153,8 @@ fu_wac_module_bluetooth_write_firmware(FuDevice *device,
 				       FU_WAC_MODULE_COMMAND_START,
 				       blob_start,
 				       fu_progress_get_child(progress),
-				       FU_WAC_MODULE_ERASE_TIMEOUT,
+				       FU_WAC_MODULE_POLL_INTERVAL,
+				       FU_WAC_MODULE_START_TIMEOUT,
 				       error)) {
 		g_prefix_error(error, "wacom bluetooth module failed to erase: ");
 		return FALSE;
@@ -170,16 +169,17 @@ fu_wac_module_bluetooth_write_firmware(FuDevice *device,
 
 		/* build data packet */
 		memset(buf, 0xff, sizeof(buf));
-		memcpy(&buf[0], bd->preamble, 7);
-		memcpy(&buf[7], bd->addr, 3);
+		memcpy(&buf[0], bd->preamble, 7); /* nocheck:blocked */
+		fu_memwrite_uint24(buf + 0x7, bd->addr, G_LITTLE_ENDIAN);
 		buf[10] = bd->crc;
-		memcpy(&buf[11], bd->cdata, sizeof(bd->cdata));
+		memcpy(&buf[11], bd->cdata, sizeof(bd->cdata)); /* nocheck:blocked */
 		blob_chunk = g_bytes_new(buf, sizeof(buf));
 		if (!fu_wac_module_set_feature(self,
 					       FU_WAC_MODULE_COMMAND_DATA,
 					       blob_chunk,
 					       fu_progress_get_child(progress),
-					       FU_WAC_MODULE_WRITE_TIMEOUT,
+					       FU_WAC_MODULE_POLL_INTERVAL,
+					       FU_WAC_MODULE_DATA_TIMEOUT,
 					       error)) {
 			g_prefix_error(error, "wacom bluetooth module failed to write: ");
 			return FALSE;
@@ -197,7 +197,8 @@ fu_wac_module_bluetooth_write_firmware(FuDevice *device,
 				       FU_WAC_MODULE_COMMAND_END,
 				       NULL,
 				       fu_progress_get_child(progress),
-				       FU_WAC_MODULE_FINISH_TIMEOUT,
+				       FU_WAC_MODULE_POLL_INTERVAL,
+				       FU_WAC_MODULE_END_TIMEOUT,
 				       error)) {
 		g_prefix_error(error, "wacom bluetooth module failed to end: ");
 		return FALSE;
@@ -218,8 +219,8 @@ fu_wac_module_bluetooth_init(FuWacModuleBluetooth *self)
 static void
 fu_wac_module_bluetooth_class_init(FuWacModuleBluetoothClass *klass)
 {
-	FuDeviceClass *klass_device = FU_DEVICE_CLASS(klass);
-	klass_device->write_firmware = fu_wac_module_bluetooth_write_firmware;
+	FuDeviceClass *device_class = FU_DEVICE_CLASS(klass);
+	device_class->write_firmware = fu_wac_module_bluetooth_write_firmware;
 }
 
 FuWacModule *

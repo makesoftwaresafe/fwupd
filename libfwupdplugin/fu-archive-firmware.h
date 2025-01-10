@@ -1,8 +1,8 @@
 /*
- * Copyright (C) 2021 Richard Hughes <richard@hughsie.com>
- * Copyright (C) 2022 Gaël PORTAY <gael.portay@collabora.com>
+ * Copyright 2021 Richard Hughes <richard@hughsie.com>
+ * Copyright 2022 Gaël PORTAY <gael.portay@collabora.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #pragma once
@@ -21,14 +21,14 @@ struct _FuArchiveFirmwareClass {
 FuFirmware *
 fu_archive_firmware_new(void);
 FuArchiveFormat
-fu_archive_firmware_get_format(FuArchiveFirmware *self);
+fu_archive_firmware_get_format(FuArchiveFirmware *self) G_GNUC_NON_NULL(1);
 void
-fu_archive_firmware_set_format(FuArchiveFirmware *self, FuArchiveFormat format);
+fu_archive_firmware_set_format(FuArchiveFirmware *self, FuArchiveFormat format) G_GNUC_NON_NULL(1);
 FuArchiveCompression
-fu_archive_firmware_get_compression(FuArchiveFirmware *self);
+fu_archive_firmware_get_compression(FuArchiveFirmware *self) G_GNUC_NON_NULL(1);
 void
-fu_archive_firmware_set_compression(FuArchiveFirmware *self, FuArchiveCompression compression);
+fu_archive_firmware_set_compression(FuArchiveFirmware *self, FuArchiveCompression compression)
+    G_GNUC_NON_NULL(1);
 FuFirmware *
-fu_archive_firmware_get_image_fnmatch(FuArchiveFirmware *self,
-				      const gchar *pattern,
-				      GError **error);
+fu_archive_firmware_get_image_fnmatch(FuArchiveFirmware *self, const gchar *pattern, GError **error)
+    G_GNUC_NON_NULL(1, 2);

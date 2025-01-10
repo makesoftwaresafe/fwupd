@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2020 Richard Hughes <richard@hughsie.com>
+ * Copyright 2020 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #include "config.h"
@@ -25,6 +25,7 @@ fu_linux_sleep_plugin_add_security_attrs(FuPlugin *plugin, FuSecurityAttrs *attr
 
 	/* create attr */
 	attr = fu_plugin_security_attr_new(plugin, FWUPD_SECURITY_ATTR_ID_SUSPEND_TO_RAM);
+	fwupd_security_attr_set_result_success(attr, FWUPD_SECURITY_ATTR_RESULT_NOT_ENABLED);
 	fu_security_attrs_append(attrs, attr);
 
 	/* load file */
@@ -43,7 +44,6 @@ fu_linux_sleep_plugin_add_security_attrs(FuPlugin *plugin, FuSecurityAttrs *attr
 
 	/* success */
 	fwupd_security_attr_add_flag(attr, FWUPD_SECURITY_ATTR_FLAG_SUCCESS);
-	fwupd_security_attr_set_result(attr, FWUPD_SECURITY_ATTR_RESULT_NOT_ENABLED);
 }
 
 static void

@@ -1,13 +1,11 @@
 /*
- * Copyright (C) 2017 Richard Hughes <richard@hughsie.com>
- * Copyright (C) 2019 9elements Agency GmbH <patrick.rudolph@9elements.com>
+ * Copyright 2017 Richard Hughes <richard@hughsie.com>
+ * Copyright 2019 9elements Agency GmbH <patrick.rudolph@9elements.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #include "config.h"
-
-#include <fwupdplugin.h>
 
 #include <libflashrom.h>
 #include <string.h>
@@ -29,8 +27,7 @@ static void
 fu_flashrom_plugin_to_string(FuPlugin *plugin, guint idt, GString *str)
 {
 	FuFlashromPlugin *self = FU_FLASHROM_PLUGIN(plugin);
-	if (self->guid != NULL)
-		fu_string_append(str, idt, "Guid", self->guid);
+	fwupd_codec_string_append(str, idt, "Guid", self->guid);
 }
 
 static int
@@ -98,18 +95,20 @@ static gboolean
 fu_flashrom_plugin_device_set_bios_info(FuPlugin *plugin, FuDevice *device, GError **error)
 {
 	FuContext *ctx = fu_plugin_get_context(plugin);
+	GBytes *bios_blob;
 	const guint8 *buf;
 	gsize bufsz;
 	guint32 bios_char = 0x0;
-	g_autoptr(GBytes) bios_table = NULL;
+	g_autoptr(GPtrArray) bios_tables = NULL;
 
 	/* get SMBIOS info */
-	bios_table = fu_context_get_smbios_data(ctx, FU_SMBIOS_STRUCTURE_TYPE_BIOS, error);
-	if (bios_table == NULL)
+	bios_tables = fu_context_get_smbios_data(ctx, FU_SMBIOS_STRUCTURE_TYPE_BIOS, error);
+	if (bios_tables == NULL)
 		return FALSE;
 
 	/* ROM size if not already been quirked */
-	buf = g_bytes_get_data(bios_table, &bufsz);
+	bios_blob = g_ptr_array_index(bios_tables, 0);
+	buf = g_bytes_get_data(bios_blob, &bufsz);
 	if (fu_device_get_firmware_size_max(device) == 0) {
 		guint8 bios_sz = 0x0;
 		if (fu_memread_uint8_safe(buf, bufsz, 0x9, &bios_sz, NULL)) {
@@ -133,20 +132,19 @@ static void
 fu_flashrom_plugin_device_set_hwids(FuPlugin *plugin, FuDevice *device)
 {
 	FuContext *ctx = fu_plugin_get_context(plugin);
-	static const gchar *hwids[] = {
-	    "HardwareID-3",
-	    "HardwareID-4",
-	    "HardwareID-5",
-	    "HardwareID-6",
+	static const gchar *chids[] = {
+	    "HardwareID-03",
+	    "HardwareID-04",
+	    "HardwareID-05",
+	    "HardwareID-06",
 	    "HardwareID-10",
-	    /* a more useful one for coreboot branch detection */
-	    FU_HWIDS_KEY_MANUFACTURER "&" FU_HWIDS_KEY_FAMILY "&" FU_HWIDS_KEY_PRODUCT_NAME
-				      "&" FU_HWIDS_KEY_PRODUCT_SKU "&" FU_HWIDS_KEY_BIOS_VENDOR,
+	    "fwupd-04", /* for coreboot */
+	    "fwupd-05", /* for coreboot */
 	};
 	/* don't include FU_HWIDS_KEY_BIOS_VERSION */
-	for (guint i = 0; i < G_N_ELEMENTS(hwids); i++) {
+	for (guint i = 0; i < G_N_ELEMENTS(chids); i++) {
 		g_autofree gchar *str = NULL;
-		str = fu_context_get_hwid_replace_value(ctx, hwids[i], NULL);
+		str = fu_context_get_hwid_replace_value(ctx, chids[i], NULL);
 		if (str != NULL)
 			fu_device_add_instance_id(device, str);
 	}
@@ -190,16 +188,18 @@ fu_flashrom_plugin_add_device(FuPlugin *plugin,
 
 	/* use same VendorID logic as with UEFI */
 	dmi_vendor = fu_context_get_hwid_value(ctx, FU_HWIDS_KEY_BIOS_VENDOR);
-	if (dmi_vendor != NULL) {
-		g_autofree gchar *vendor_id = g_strdup_printf("DMI:%s", dmi_vendor);
-		fu_device_add_vendor_id(FU_DEVICE(device), vendor_id);
-	}
-	fu_flashrom_plugin_device_set_version(plugin, device);
+	fu_device_build_vendor_id(FU_DEVICE(device), "DMI", dmi_vendor);
 	fu_flashrom_plugin_device_set_hwids(plugin, device);
+	fu_flashrom_plugin_device_set_version(plugin, device);
 	if (!fu_flashrom_plugin_device_set_bios_info(plugin, device, &error_local))
 		g_warning("failed to set bios info: %s", error_local->message);
 	if (!fu_device_setup(device, error))
 		return NULL;
+
+	/* BCR is almost-never used on coreboot because SMI is evil */
+	if (g_strcmp0(dmi_vendor, "coreboot") == 0 &&
+	    fu_device_get_metadata(device, "PciBcrAddr") == NULL)
+		fu_device_set_metadata_integer(device, "PciBcrAddr", 0x0);
 
 	/* success */
 	fu_plugin_device_add(plugin, device);
@@ -245,6 +245,10 @@ fu_flashrom_plugin_find_guid(FuPlugin *plugin, GError **error)
 	FuContext *ctx = fu_plugin_get_context(plugin);
 	GPtrArray *hwids = fu_context_get_hwid_guids(ctx);
 
+	/* any coreboot */
+	if (g_strcmp0(fu_context_get_hwid_value(ctx, FU_HWIDS_KEY_BIOS_VENDOR), "coreboot") == 0)
+		return g_strdup(FWUPD_DEVICE_ID_ANY);
+
 	for (guint i = 0; i < hwids->len; i++) {
 		const gchar *guid = g_ptr_array_index(hwids, i);
 		const gchar *plugin_name =
@@ -260,8 +264,11 @@ fu_flashrom_plugin_find_guid(FuPlugin *plugin, GError **error)
 static gboolean
 fu_flashrom_plugin_startup(FuPlugin *plugin, FuProgress *progress, GError **error)
 {
+	const gchar *flashrom_args;
+	const gchar *flashrom_prog;
 	gint rc;
 	const gchar *guid;
+	FuContext *ctx = fu_plugin_get_context(plugin);
 	FuFlashromPlugin *self = FU_FLASHROM_PLUGIN(plugin);
 
 	/* progress */
@@ -275,7 +282,11 @@ fu_flashrom_plugin_startup(FuPlugin *plugin, FuProgress *progress, GError **erro
 		return FALSE;
 	fu_progress_step_done(progress);
 
-	self->guid = g_strdup(guid);
+	/* if changed */
+	if (g_strcmp0(self->guid, guid) != 0) {
+		g_free(self->guid);
+		self->guid = g_strdup(guid);
+	}
 
 	if (flashrom_init(SELFCHECK_TRUE)) {
 		g_set_error_literal(error,
@@ -287,7 +298,13 @@ fu_flashrom_plugin_startup(FuPlugin *plugin, FuProgress *progress, GError **erro
 	flashrom_set_log_callback(fu_flashrom_plugin_debug_cb);
 	fu_progress_step_done(progress);
 
-	if (flashrom_programmer_init(&self->flashprog, "internal", NULL)) {
+	/* allow overriding from quirk file */
+	flashrom_prog = fu_context_lookup_quirk_by_id(ctx, guid, "FlashromProgrammer");
+	if (flashrom_prog == NULL)
+		flashrom_prog = "internal";
+	flashrom_args = fu_context_lookup_quirk_by_id(ctx, guid, "FlashromArgs");
+	g_debug("using programmer %s: %s", flashrom_prog, flashrom_args);
+	if (flashrom_programmer_init(&self->flashprog, flashrom_prog, flashrom_args)) {
 		g_set_error_literal(error,
 				    FWUPD_ERROR,
 				    FWUPD_ERROR_NOT_SUPPORTED,
@@ -338,6 +355,7 @@ fu_flashrom_plugin_constructed(GObject *obj)
 	fu_plugin_add_rule(plugin, FU_PLUGIN_RULE_CONFLICTS, "coreboot"); /* obsoleted */
 	fu_plugin_add_flag(plugin, FWUPD_PLUGIN_FLAG_REQUIRE_HWID);
 	fu_plugin_add_flag(plugin, FWUPD_PLUGIN_FLAG_MEASURE_SYSTEM_INTEGRITY);
+	fu_plugin_add_device_gtype(plugin, FU_TYPE_FLASHROM_DEVICE); /* coverage */
 }
 
 static void

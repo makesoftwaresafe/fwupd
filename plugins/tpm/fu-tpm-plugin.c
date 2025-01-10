@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2019 Richard Hughes <richard@hughsie.com>
+ * Copyright 2019 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #include "config.h"
@@ -25,9 +25,15 @@ fu_tpm_plugin_to_string(FuPlugin *plugin, guint idt, GString *str)
 {
 	FuTpmPlugin *self = FU_TPM_PLUGIN(plugin);
 	if (self->tpm_device != NULL)
-		fu_string_append(str, idt, "TpmDevice", fu_device_get_id(self->tpm_device));
+		fwupd_codec_string_append(str,
+					  idt,
+					  "TpmDevice",
+					  fu_device_get_id(self->tpm_device));
 	if (self->bios_device != NULL)
-		fu_string_append(str, idt, "BiosDevice", fu_device_get_id(self->bios_device));
+		fwupd_codec_string_append(str,
+					  idt,
+					  "BiosDevice",
+					  fu_device_get_id(self->bios_device));
 }
 
 static void
@@ -57,7 +63,7 @@ static void
 fu_tpm_plugin_device_registered(FuPlugin *plugin, FuDevice *device)
 {
 	FuTpmPlugin *self = FU_TPM_PLUGIN(plugin);
-	if (fu_device_has_instance_id(device, "main-system-firmware")) {
+	if (fu_device_has_private_flag(device, FU_DEVICE_PRIVATE_FLAG_HOST_FIRMWARE)) {
 		g_set_object(&self->bios_device, device);
 		fu_tpm_plugin_set_bios_pcr0s(plugin);
 	}
@@ -68,11 +74,11 @@ fu_tpm_plugin_device_added(FuPlugin *plugin, FuDevice *dev)
 {
 	FuTpmPlugin *self = FU_TPM_PLUGIN(plugin);
 	g_autoptr(GPtrArray) pcr0s = NULL;
+	const gchar *family = fu_tpm_device_get_family(FU_TPM_DEVICE(dev));
 
 	g_set_object(&self->tpm_device, FU_TPM_DEVICE(dev));
-	fu_plugin_add_report_metadata(plugin,
-				      "TpmFamily",
-				      fu_tpm_device_get_family(FU_TPM_DEVICE(dev)));
+	if (family != NULL)
+		fu_plugin_add_report_metadata(plugin, "TpmFamily", family);
 
 	/* ensure */
 	fu_tpm_plugin_set_bios_pcr0s(plugin);
@@ -105,6 +111,7 @@ fu_tpm_plugin_add_security_attr_version(FuPlugin *plugin, FuSecurityAttrs *attrs
 
 	/* create attr */
 	attr = fu_plugin_security_attr_new(plugin, FWUPD_SECURITY_ATTR_ID_TPM_VERSION_20);
+	fwupd_security_attr_set_result_success(attr, FWUPD_SECURITY_ATTR_RESULT_FOUND);
 	fu_security_attrs_append(attrs, attr);
 
 	/* check exists, and in v2.0 mode */
@@ -121,7 +128,6 @@ fu_tpm_plugin_add_security_attr_version(FuPlugin *plugin, FuSecurityAttrs *attrs
 	/* success */
 	fwupd_security_attr_add_guids(attr, fu_device_get_guids(FU_DEVICE(self->tpm_device)));
 	fwupd_security_attr_add_flag(attr, FWUPD_SECURITY_ATTR_FLAG_SUCCESS);
-	fwupd_security_attr_set_result(attr, FWUPD_SECURITY_ATTR_RESULT_FOUND);
 }
 
 static void
@@ -141,6 +147,7 @@ fu_tpm_plugin_add_security_attr_eventlog(FuPlugin *plugin, FuSecurityAttrs *attr
 	/* create attr */
 	attr = fu_plugin_security_attr_new(plugin, FWUPD_SECURITY_ATTR_ID_TPM_RECONSTRUCTION_PCR0);
 	fwupd_security_attr_add_guids(attr, fu_device_get_guids(self->tpm_device));
+	fwupd_security_attr_set_result_success(attr, FWUPD_SECURITY_ATTR_RESULT_VALID);
 	fu_security_attrs_append(attrs, attr);
 
 	/* check reconstructed to PCR0 */
@@ -186,7 +193,6 @@ fu_tpm_plugin_add_security_attr_eventlog(FuPlugin *plugin, FuSecurityAttrs *attr
 
 	/* success */
 	fwupd_security_attr_add_flag(attr, FWUPD_SECURITY_ATTR_FLAG_SUCCESS);
-	fwupd_security_attr_set_result(attr, FWUPD_SECURITY_ATTR_RESULT_VALID);
 }
 
 static void
@@ -202,6 +208,7 @@ fu_tpm_plugin_add_security_attr_empty(FuPlugin *plugin, FuSecurityAttrs *attrs)
 	/* add attributes */
 	attr = fu_plugin_security_attr_new(plugin, FWUPD_SECURITY_ATTR_ID_TPM_EMPTY_PCR);
 	fwupd_security_attr_add_guids(attr, fu_device_get_guids(self->tpm_device));
+	fwupd_security_attr_set_result_success(attr, FWUPD_SECURITY_ATTR_RESULT_VALID);
 	fu_security_attrs_append(attrs, attr);
 
 	/* check PCRs 0 through 7 for empty checksums */
@@ -229,7 +236,6 @@ fu_tpm_plugin_add_security_attr_empty(FuPlugin *plugin, FuSecurityAttrs *attrs)
 
 	/* success */
 	fwupd_security_attr_add_flag(attr, FWUPD_SECURITY_ATTR_FLAG_SUCCESS);
-	fwupd_security_attr_set_result(attr, FWUPD_SECURITY_ATTR_RESULT_VALID);
 }
 
 static void
@@ -287,11 +293,18 @@ fu_tpm_plugin_coldplug_eventlog(FuPlugin *plugin, GError **error)
 {
 	FuTpmPlugin *self = FU_TPM_PLUGIN(plugin);
 	gsize bufsz = 0;
-	const gchar *fn = "/sys/kernel/security/tpm0/binary_bios_measurements";
+	g_autofree gchar *fn = NULL;
 	g_autofree gchar *str = NULL;
+	g_autofree gchar *sysfsdir = fu_path_from_kind(FU_PATH_KIND_SYSFSDIR);
 	g_autofree guint8 *buf = NULL;
 
 	/* do not show a warning if no TPM exists, or the kernel is too old */
+	fn = g_build_filename(sysfsdir,
+			      "kernel",
+			      "security",
+			      "tpm0",
+			      "binary_bios_measurements",
+			      NULL);
 	if (!g_file_test(fn, G_FILE_TEST_EXISTS)) {
 		g_debug("no %s, so skipping", fn);
 		return TRUE;
@@ -365,12 +378,13 @@ fu_tpm_plugin_constructed(GObject *obj)
 
 	/* old name */
 	fu_plugin_add_rule(plugin, FU_PLUGIN_RULE_CONFLICTS, "tpm_eventlog");
-	fu_plugin_add_udev_subsystem(plugin, "tpm");
-	fu_plugin_add_device_gtype(plugin, FU_TYPE_TPM_V2_DEVICE);
+	fu_plugin_add_device_udev_subsystem(plugin, "tpm");
+	fu_plugin_set_device_gtype_default(plugin, FU_TYPE_TPM_V2_DEVICE);
+	fu_plugin_add_device_gtype(plugin, FU_TYPE_TPM_V1_DEVICE); /* coverage */
 }
 
 static void
-fu_tpm_finalize(GObject *obj)
+fu_tpm_plugin_finalize(GObject *obj)
 {
 	FuTpmPlugin *self = FU_TPM_PLUGIN(obj);
 	if (self->tpm_device != NULL)
@@ -388,7 +402,7 @@ fu_tpm_plugin_class_init(FuTpmPluginClass *klass)
 	FuPluginClass *plugin_class = FU_PLUGIN_CLASS(klass);
 	GObjectClass *object_class = G_OBJECT_CLASS(klass);
 
-	object_class->finalize = fu_tpm_finalize;
+	object_class->finalize = fu_tpm_plugin_finalize;
 	plugin_class->constructed = fu_tpm_plugin_constructed;
 	plugin_class->to_string = fu_tpm_plugin_to_string;
 	plugin_class->startup = fu_tpm_plugin_startup;

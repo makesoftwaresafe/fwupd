@@ -1,12 +1,10 @@
 /*
- * Copyright (C) 2021 Richard Hughes <richard@hughsie.com>
+ * Copyright 2021 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #include "config.h"
-
-#include <fwupdplugin.h>
 
 #include <gio/gunixmounts.h>
 
@@ -14,13 +12,6 @@
 #include "fu-uefi-cod-device.h"
 #include "fu-uefi-common.h"
 #include "fu-uefi-nvram-device.h"
-
-#ifndef HAVE_GIO_2_55_0
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunused-function"
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(GUnixMountEntry, g_unix_mount_free)
-#pragma clang diagnostic pop
-#endif
 
 struct _FuUefiBackendLinux {
 	FuUefiBackend parent_instance;
@@ -37,7 +28,9 @@ fu_uefi_backend_linux_read(const gchar *path, const gchar *filename)
 }
 
 static FuUefiDevice *
-fu_uefi_backend_linux_device_new(FuUefiBackendLinux *self, const gchar *path)
+fu_uefi_backend_linux_device_new(FuUefiBackendLinux *self,
+				 const gchar *physical_id,
+				 const gchar *path)
 {
 	g_autoptr(FuUefiDevice) dev = NULL;
 	g_autofree gchar *fw_class = NULL;
@@ -82,7 +75,9 @@ fu_uefi_backend_linux_device_new(FuUefiBackendLinux *self, const gchar *path)
 		fu_device_add_private_flag(FU_DEVICE(dev), FU_UEFI_DEVICE_FLAG_NO_RT_SET_VARIABLE);
 
 	/* set ID */
-	fu_device_set_physical_id(FU_DEVICE(dev), path);
+	fu_device_set_backend_id(FU_DEVICE(dev), path);
+	fu_device_set_physical_id(FU_DEVICE(dev), physical_id);
+	fu_device_set_logical_id(FU_DEVICE(dev), fw_class);
 	return g_steal_pointer(&dev);
 }
 
@@ -148,7 +143,8 @@ fu_uefi_backend_linux_coldplug(FuBackend *backend, FuProgress *progress, GError 
 	/* add each device */
 	while ((fn = g_dir_read_name(dir)) != NULL) {
 		g_autofree gchar *path = g_build_filename(esrt_entries, fn, NULL);
-		g_autoptr(FuUefiDevice) dev = fu_uefi_backend_linux_device_new(self, path);
+		g_autoptr(FuUefiDevice) dev =
+		    fu_uefi_backend_linux_device_new(self, esrt_path, path);
 		fu_backend_device_added(backend, FU_DEVICE(dev));
 	}
 
@@ -159,10 +155,12 @@ fu_uefi_backend_linux_coldplug(FuBackend *backend, FuProgress *progress, GError 
 static gboolean
 fu_uefi_backend_linux_check_smbios_enabled(FuContext *ctx, GError **error)
 {
+	GBytes *bios_blob;
 	const guint8 *data;
 	gsize sz;
-	g_autoptr(GBytes) bios_information = fu_context_get_smbios_data(ctx, 0, NULL);
-	if (bios_information == NULL) {
+	g_autoptr(GPtrArray) bios_tables = fu_context_get_smbios_data(ctx, 0, NULL);
+
+	if (bios_tables == NULL) {
 		const gchar *tmp = g_getenv("FWUPD_DELL_FAKE_SMBIOS");
 		if (tmp != NULL)
 			return TRUE;
@@ -172,7 +170,8 @@ fu_uefi_backend_linux_check_smbios_enabled(FuContext *ctx, GError **error)
 				    "SMBIOS not supported");
 		return FALSE;
 	}
-	data = g_bytes_get_data(bios_information, &sz);
+	bios_blob = g_ptr_array_index(bios_tables, 0);
+	data = g_bytes_get_data(bios_blob, &sz);
 	if (sz < 0x14) {
 		g_set_error(error,
 			    FWUPD_ERROR,
@@ -199,7 +198,10 @@ fu_uefi_backend_linux_check_smbios_enabled(FuContext *ctx, GError **error)
 }
 
 static gboolean
-fu_uefi_backend_linux_setup(FuBackend *backend, FuProgress *progress, GError **error)
+fu_uefi_backend_linux_setup(FuBackend *backend,
+			    FuBackendSetupFlags flags,
+			    FuProgress *progress,
+			    GError **error)
 {
 	g_autoptr(GError) error_local = NULL;
 
@@ -234,9 +236,9 @@ fu_uefi_backend_linux_init(FuUefiBackendLinux *self)
 static void
 fu_uefi_backend_linux_class_init(FuUefiBackendLinuxClass *klass)
 {
-	FuBackendClass *klass_backend = FU_BACKEND_CLASS(klass);
-	klass_backend->coldplug = fu_uefi_backend_linux_coldplug;
-	klass_backend->setup = fu_uefi_backend_linux_setup;
+	FuBackendClass *backend_class = FU_BACKEND_CLASS(klass);
+	backend_class->coldplug = fu_uefi_backend_linux_coldplug;
+	backend_class->setup = fu_uefi_backend_linux_setup;
 }
 
 FuBackend *

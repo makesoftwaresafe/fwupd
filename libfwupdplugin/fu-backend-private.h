@@ -1,22 +1,12 @@
 /*
- * Copyright (C) 2022 Richard Hughes <richard@hughsie.com>
+ * Copyright 2024 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #pragma once
 
 #include "fu-backend.h"
 
-gboolean
-fu_backend_load(FuBackend *self,
-		JsonObject *json_object,
-		const gchar *tag,
-		FuBackendLoadFlags flags,
-		GError **error);
-gboolean
-fu_backend_save(FuBackend *self,
-		JsonBuilder *json_builder,
-		const gchar *tag,
-		FuBackendSaveFlags flags,
-		GError **error);
+gchar *
+fu_backend_get_emulation_array_member_name(FuBackend *self);

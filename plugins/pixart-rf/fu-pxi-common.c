@@ -1,8 +1,8 @@
 /*
- * Copyright (C) 2021 Jimmy Yu <Jimmy_yu@pixart.com>
- * Copyright (C) 2021 Richard Hughes <richard@hughsie.com>
+ * Copyright 2021 Jimmy Yu <Jimmy_yu@pixart.com>
+ * Copyright 2021 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #include "config.h"
@@ -13,17 +13,21 @@
 void
 fu_pxi_ota_fw_state_to_string(struct ota_fw_state *fwstate, guint idt, GString *str)
 {
-	fu_string_append_kx(str, idt, "Status", fwstate->status);
-	fu_string_append_kx(str, idt, "NewFlow", fwstate->new_flow);
-	fu_string_append_kx(str, idt, "CurrentObjectOffset", fwstate->offset);
-	fu_string_append_kx(str, idt, "CurrentChecksum", fwstate->checksum);
-	fu_string_append_kx(str, idt, "MaxObjectSize", fwstate->max_object_size);
-	fu_string_append_kx(str, idt, "MtuSize", fwstate->mtu_size);
-	fu_string_append_kx(str, idt, "PacketReceiptNotificationThreshold", fwstate->prn_threshold);
-	fu_string_append(str,
-			 idt,
-			 "SpecCheckResult",
-			 fu_pxi_ota_spec_check_result_to_string(fwstate->spec_check_result));
+	fwupd_codec_string_append_hex(str, idt, "Status", fwstate->status);
+	fwupd_codec_string_append_hex(str, idt, "NewFlow", fwstate->new_flow);
+	fwupd_codec_string_append_hex(str, idt, "CurrentObjectOffset", fwstate->offset);
+	fwupd_codec_string_append_hex(str, idt, "CurrentChecksum", fwstate->checksum);
+	fwupd_codec_string_append_hex(str, idt, "MaxObjectSize", fwstate->max_object_size);
+	fwupd_codec_string_append_hex(str, idt, "MtuSize", fwstate->mtu_size);
+	fwupd_codec_string_append_hex(str,
+				      idt,
+				      "PacketReceiptNotificationThreshold",
+				      fwstate->prn_threshold);
+	fwupd_codec_string_append(
+	    str,
+	    idt,
+	    "SpecCheckResult",
+	    fu_pxi_ota_spec_check_result_to_string(fwstate->spec_check_result));
 }
 
 gboolean
@@ -110,8 +114,9 @@ fu_pxi_composite_receiver_cmd(guint8 opcode,
 	g_byte_array_prepend(wireless_mod_cmd, &target, 0x01); /* target */
 	g_byte_array_prepend(wireless_mod_cmd, &hid_sn, 0x01); /* hid command sn */
 
-	/* prepend length and rf command code */
-	len = wireless_mod_cmd->len;
+	/* prepend length and rf command code, the param len not include "hid_sn" byte and "target"
+	 * byte */
+	len = wireless_mod_cmd->len - 2;
 	g_byte_array_prepend(wireless_mod_cmd, &len, 0x01);
 	g_byte_array_prepend(wireless_mod_cmd, &rf_cmd_code, 0x01); /* command code */
 
@@ -122,4 +127,15 @@ fu_pxi_composite_receiver_cmd(guint8 opcode,
 	/* prepend feature report id */
 	g_byte_array_prepend(wireless_mod_cmd, &rid, 0x01);
 	return TRUE;
+}
+
+gchar *
+fu_pxi_hpac_version_info_parse(const guint16 hpac_ver)
+{
+	return g_strdup_printf("%u%u.%u%u.%u",
+			       (guint)(hpac_ver / 10000),
+			       (guint)((hpac_ver / 1000) % 10),
+			       (guint)((hpac_ver / 100) % 10),
+			       (guint)((hpac_ver / 10) % 10),
+			       (guint)(hpac_ver % 10));
 }

@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2019 Richard Hughes <richard@hughsie.com>
+ * Copyright 2019 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #pragma once
@@ -63,18 +63,18 @@ struct _FuDfuFirmwareClass {
 FuFirmware *
 fu_dfu_firmware_new(void);
 guint16
-fu_dfu_firmware_get_vid(FuDfuFirmware *self);
+fu_dfu_firmware_get_vid(FuDfuFirmware *self) G_GNUC_NON_NULL(1);
 guint16
-fu_dfu_firmware_get_pid(FuDfuFirmware *self);
+fu_dfu_firmware_get_pid(FuDfuFirmware *self) G_GNUC_NON_NULL(1);
 guint16
-fu_dfu_firmware_get_release(FuDfuFirmware *self);
+fu_dfu_firmware_get_release(FuDfuFirmware *self) G_GNUC_NON_NULL(1);
 guint16
-fu_dfu_firmware_get_version(FuDfuFirmware *self);
+fu_dfu_firmware_get_version(FuDfuFirmware *self) G_GNUC_NON_NULL(1);
 void
-fu_dfu_firmware_set_vid(FuDfuFirmware *self, guint16 vid);
+fu_dfu_firmware_set_vid(FuDfuFirmware *self, guint16 vid) G_GNUC_NON_NULL(1);
 void
-fu_dfu_firmware_set_pid(FuDfuFirmware *self, guint16 pid);
+fu_dfu_firmware_set_pid(FuDfuFirmware *self, guint16 pid) G_GNUC_NON_NULL(1);
 void
-fu_dfu_firmware_set_release(FuDfuFirmware *self, guint16 release);
+fu_dfu_firmware_set_release(FuDfuFirmware *self, guint16 release) G_GNUC_NON_NULL(1);
 void
-fu_dfu_firmware_set_version(FuDfuFirmware *self, guint16 version);
+fu_dfu_firmware_set_version(FuDfuFirmware *self, guint16 version) G_GNUC_NON_NULL(1);

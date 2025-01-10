@@ -1,14 +1,12 @@
 /*
- * Copyright (C) 2019 Aleksander Morgado <aleksander@aleksander.es>
+ * Copyright 2019 Aleksander Morgado <aleksander@aleksander.es>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #include "config.h"
 
 #include <fwupdplugin.h>
-
-#include <string.h>
 
 #include "fu-qmi-pdc-updater.h"
 
@@ -258,15 +256,6 @@ typedef struct {
 	guint token;
 } WriteContext;
 
-#if !QMI_CHECK_VERSION(1, 26, 0)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunused-function"
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(QmiMessagePdcLoadConfigInput, qmi_message_pdc_load_config_input_unref)
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(QmiMessagePdcLoadConfigOutput,
-			      qmi_message_pdc_load_config_output_unref)
-#pragma clang diagnostic pop
-#endif
-
 static void
 fu_qmi_pdc_updater_load_config(WriteContext *ctx);
 
@@ -280,8 +269,8 @@ fu_qmi_pdc_updater_load_config_timeout(gpointer user_data)
 	ctx->indication_id = 0;
 
 	g_set_error_literal(&ctx->error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_FAILED,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_TIMED_OUT,
 			    "couldn't load mcfg: timed out");
 	g_main_loop_quit(ctx->mainloop);
 
@@ -321,8 +310,8 @@ fu_qmi_pdc_updater_load_config_indication(QmiClientPdc *client,
 		}
 
 		g_set_error(&ctx->error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_FAILED,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_INTERNAL,
 			    "couldn't load mcfg: %s",
 			    qmi_protocol_error_get_string((QmiProtocolError)error_code));
 		g_main_loop_quit(ctx->mainloop);
@@ -332,8 +321,8 @@ fu_qmi_pdc_updater_load_config_indication(QmiClientPdc *client,
 	if (qmi_indication_pdc_load_config_output_get_frame_reset(output, &frame_reset, NULL) &&
 	    frame_reset) {
 		g_set_error(&ctx->error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_FAILED,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_INTERNAL,
 			    "couldn't load mcfg: sent data discarded");
 		g_main_loop_quit(ctx->mainloop);
 		return;
@@ -493,16 +482,6 @@ typedef struct {
 	guint token;
 } ActivateContext;
 
-#if !QMI_CHECK_VERSION(1, 26, 0)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunused-function"
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(QmiMessagePdcActivateConfigInput,
-			      qmi_message_pdc_activate_config_input_unref)
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(QmiMessagePdcActivateConfigOutput,
-			      qmi_message_pdc_activate_config_output_unref)
-#pragma clang diagnostic pop
-#endif
-
 static gboolean
 fu_qmi_pdc_updater_activate_config_timeout(gpointer user_data)
 {
@@ -539,8 +518,8 @@ fu_qmi_pdc_updater_activate_config_indication(QmiClientPdc *client,
 
 	if (error_code != 0) {
 		g_set_error(&ctx->error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_FAILED,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_INTERNAL,
 			    "couldn't activate config: %s",
 			    qmi_protocol_error_get_string((QmiProtocolError)error_code));
 		g_main_loop_quit(ctx->mainloop);
@@ -618,16 +597,6 @@ fu_qmi_pdc_updater_activate_config(ActivateContext *ctx)
 				       ctx);
 }
 
-#if !QMI_CHECK_VERSION(1, 26, 0)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunused-function"
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(QmiMessagePdcSetSelectedConfigInput,
-			      qmi_message_pdc_set_selected_config_input_unref)
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(QmiMessagePdcSetSelectedConfigOutput,
-			      qmi_message_pdc_set_selected_config_output_unref)
-#pragma clang diagnostic pop
-#endif
-
 static gboolean
 fu_qmi_pdc_updater_set_selected_config_timeout(gpointer user_data)
 {
@@ -638,8 +607,8 @@ fu_qmi_pdc_updater_set_selected_config_timeout(gpointer user_data)
 	ctx->indication_id = 0;
 
 	g_set_error_literal(&ctx->error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_FAILED,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_TIMED_OUT,
 			    "couldn't set selected config: timed out");
 	g_main_loop_quit(ctx->mainloop);
 
@@ -667,8 +636,8 @@ fu_qmi_pdc_updater_set_selected_config_indication(QmiClientPdc *client,
 
 	if (error_code != 0) {
 		g_set_error(&ctx->error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_FAILED,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_INTERNAL,
 			    "couldn't set selected config: %s",
 			    qmi_protocol_error_get_string((QmiProtocolError)error_code));
 		g_main_loop_quit(ctx->mainloop);

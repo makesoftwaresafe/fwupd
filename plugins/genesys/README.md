@@ -8,6 +8,7 @@ This plugin allows updating the Genesys Logic USB Hub devices.
 
 * GL3521
 * GL3523
+* GL3525
 * GL3590
 
 Additionally, this plugin allows updating the MStar Semiconductor Scaler connected via an I²C bus.
@@ -27,20 +28,22 @@ This plugin supports the following protocol IDs:
 
 These devices use the standard USB DeviceInstanceId values for the USB Hub, e.g.
 
-* GenesysLogic USB2.0 Hub: `USB\VID_05E3&PID_0610`
-* HP USB-C Controller: `USB\VID_03F0&PID_0610`
+* `USB\VID_05E3&PID_0610` (quirk-only)
+
+These devices use the standard USB DeviceInstanceId values for the HID under USB hub, e.g.
+
+* `USB\VID_05E3&PID_0102` (quirk-only)
 
 Additionally, some customized instance IDs are added. e.g.
 
-* GenesysLogic USB2.0 Hub: `USB\VID_03F0&PID_0610&IC_352330&BONDING_0F`
-* GenesysLogic USB2.0 Hub: `USB\VID_03F0&PID_0610&VENDOR_GENESYSLOGIC&IC_352330&BONDING_0F&PORTNUM_23&VENDORSUP_C09B5DD3-1A23-51D2-995A-F7366AAB3CA4`
-* HP M24fd USB-C Hub: `USB\VID_03F0&PID_0610&PUBKEY_AB859399-95B8-5817-B521-9AD8CC7F5BD6`
-* HP M27fd USB-C Hub: `USB\VID_03F0&PID_0610&PUBKEY_6BE97D77-C2BA-5AA2-B7DF-B9B318BEC2B5`
+* `USB\VID_03F0&PID_0610&IC_352330&BONDING_0F`
+* `USB\VID_03F0&PID_0610&VENDOR_GENESYSLOGIC&IC_352330&BONDING_0F&PORTNUM_23&VENDORSUP_C09B5DD3-1A23-51D2-995A-F7366AAB3CA4`
+* `USB\VID_05E3&PID_0630&PROJECT_1885D34D-0418-5EF8-8E69-4CEF77B6B6E8`
+* `USB\VID_03F0&PID_0610&PUBKEY_AB859399-95B8-5817-B521-9AD8CC7F5BD6`
 
 These devices also use custom GUID values for the Scaler, e.g.
 
-* HP M24fd USB-C Monitor: `GENESYS_SCALER\MSTAR_TSUM_G&PUBKEY_B335BDCE-7073-5D0E-9BD3-9B69C1A6899F&PANELREV_RIM101`
-* HP M27fd USB-C Monitor: `GENESYS_SCALER\MSTAR_TSUM_G&PUBKEY_847A3650-8648-586B-83C8-8B53714F37E3&PANELREV_RIM101`
+* `GENESYS_SCALER\MSTAR_TSUM_G&PUBKEY_B335BDCE-7073-5D0E-9BD3-9B69C1A6899F&PANELREV_RIM101`
 
 The Public Key is product-specific and is required to identify the product.
 
@@ -48,17 +51,29 @@ The Public Key is product-specific and is required to identify the product.
 
 This plugin uses the following plugin-specific quirks:
 
-### has-mstar-scaler
+### `Flags=has-mstar-scaler`
 
 USB Hub has a MStar Semiconductor Scaler attached via I²C.
 
 Since 1.7.6.
 
-### has-public-key
+### `Flags=has-public-key`
 
 Device has a public-key appended to firmware.
 
 Since 1.8.0
+
+### `Flags=pause-r2-cpu`
+
+Pause R2 CPU.
+
+Since 1.7.6
+
+### `Flags=use-i2c-ch0`
+
+Use I2C ch0.
+
+Since 1.7.6
 
 ### GenesysUsbhubSwitchRequest
 
@@ -137,10 +152,6 @@ CFI Flash Id.
 
 Since 1.8.2.
 
-## Runtime Requirement
-
-The USB Hub devices and its attached Scaler require libgusb version [0.3.8][1] or later to be detected.
-
 ## Update Behavior
 
 The devices are independently updated at runtime using USB control transfers.
@@ -157,8 +168,13 @@ The vendor ID is set from the USB vendor, for example set to `USB:0x03F0` for HP
 
 This plugin requires read/write access to `/dev/bus/usb`.
 
-[1]: https://github.com/hughsie/libgusb/commit/4e118c154dde70e196c4381bd97790a9413c3552
-
 ## Version Considerations
 
 This plugin has been available since fwupd version `1.7.6`.
+
+## Owners
+
+Anyone can submit a pull request to modify this plugin, but the following people should be
+consulted before making major or functional changes:
+
+* Adam Chen: @adamgene

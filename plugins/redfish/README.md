@@ -25,7 +25,7 @@ These devices use the provided GUID provided in the `SoftwareId` property
 without modification if it is a valid GUID. If the property is not a GUID then
 the vendor instance ID is used instead:
 
-* `REDFISH\\VENDOR_${RedfishManufacturer}&SOFTWAREID_${RedfishSoftwareId}`
+* `REDFISH\VENDOR_${RedfishManufacturer}&SOFTWAREID_${RedfishSoftwareId}`
 
 Additionally, this Instance ID is added for quirk and parent matching:
 
@@ -56,6 +56,32 @@ Delay in ms to use before querying /redfish/v1/UpdateService after a cleanup res
 default 0ms.
 
 Since: 1.8.0
+
+### `Flags=wildcard-targets`
+
+Do not specify the `odata.id` in the multipart update Targets array and allow the BMC to deploy the
+firmware onto all compatible hardware.
+
+To use this option the payload must contain metadata that restricts it to a specific SoftwareId.
+
+### `Flags=no-manager-reset-request`
+
+The BMC device will auto-reboot and so fwupd should not explicitly call
+`/redfish/v1/Managers/1/Actions/Manager.Reset`.
+
+Since: 1.9.11
+
+### `Flags=is-backup`
+
+The device is the other half of a dual image firmware.
+
+### `Flags=unsigned-build`
+
+Use unsigned development builds.
+
+### `Flags=manager-reset`
+
+Reset the manager (typically the BMC) after updating this device.
 
 ## Setting Service IP Manually
 
@@ -94,7 +120,7 @@ to one of "Manager Network" Interfaces. For example:
 In this example, the service IP is "192.168.0.133".
 
 Since the conventional HTTP port is 80 and HTTPS port is 443, we can set
-RedfishUri to either "http://192.168.0.133:80" or "https://192.168.0.133:443"
+RedfishUri to either "<http://192.168.0.133:80>" or "<https://192.168.0.133:443>"
 and verify the uri with
 
 ```shell

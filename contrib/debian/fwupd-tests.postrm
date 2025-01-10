@@ -3,13 +3,11 @@ set -e
 
 #DEBHELPER#
 
-if [ "$1" = remove -o "$1" = purge ]; then
-	if [ -f /etc/fwupd/fwupd.conf ]; then
-		if [ "$CI" = "true" ]; then
-			sed "s,^DisabledPlugins=,DisabledPlugins=test," -i /etc/fwupd/fwupd.conf
-			sed "s,^AllowEmulation=true,AllowEmulation=false," -i /etc/fwupd/fwupd.conf
-		else
-			echo "To disable test suite, modify /etc/fwupd/fwupd.conf"
-		fi
+# don't run on purge; the commands might be missing
+if [ "$1" = remove ]; then
+	if [ "$CI" = "true" ]; then
+		fwupdtool disable-test-devices
+	else
+		echo "To disable test suite, run `fwupdtool disable-test-devices`"
 	fi
 fi

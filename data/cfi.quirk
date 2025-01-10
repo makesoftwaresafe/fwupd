@@ -84,9 +84,22 @@ Vendor = Sanyo
 # AMIC
 [CFI\FLASHID_7F]
 Vendor = AMIC
-[CFI\FLASHID_7F9D21]
-Name = A49LF040A
+
+# Puya Semiconductor
+[CFI\FLASHID_85]
+Vendor = Puya
+[CFI\FLASHID_854012]
+Name = P25Q21H
+FirmwareSizeMax = 0x40000
+[CFI\FLASHID_854011]
+Name = P25Q11H
 FirmwareSizeMax = 0x20000
+[CFI\FLASHID_854010]
+Name = P25Q06H
+FirmwareSizeMax = 0x10000
+[CFI\FLASHID_852014]
+Name = PY25Q80HB
+FirmwareSizeMax = 0x100000
 
 [CFI\FLASHID_89]
 Vendor = Intel
@@ -102,6 +115,12 @@ Vendor = Texas Instruments
 # PMC
 [CFI\FLASHID_9D]
 Vendor = PMC
+[CFI\FLASHID_7F9D20]
+Name = PM25Lx512x
+FirmwareSizeMax = 0x10000
+[CFI\FLASHID_7F9D21]
+Name = PM25LD010
+FirmwareSizeMax = 0x20000
 
 # Fudan
 [CFI\FLASHID_A1]
@@ -142,6 +161,9 @@ CfiDeviceCmdBlockErase = 0xd8
 CfiDeviceBlockSize = 0x10000
 CfiDeviceSectorSize = 0x1000
 CfiDevicePageSize = 0x100
+[CFI\FLASHID_C22011]
+Name = MX25L1006E
+FirmwareSizeMax = 0x20000
 [CFI\FLASHID_C22012]
 Name = MX25V2033F
 FirmwareSizeMax = 0x40000
@@ -152,6 +174,9 @@ FirmwareSizeMax = 0x400000
 Name = MX25Lxxx1E
 CfiDeviceCmdChipErase = 0x60
 CfiDeviceCmdSectorErase = 0x20
+[CFI\FLASHID_C22312]
+Name = MX25V2035F
+FirmwareSizeMax = 0x40000
 
 # GigaDevice
 [CFI\FLASHID_C8]
@@ -164,6 +189,9 @@ CfiDeviceCmdBlockErase = 0xd8
 CfiDeviceBlockSize = 0x10000
 CfiDeviceSectorSize = 0x1000
 CfiDevicePageSize = 0x100
+[CFI\FLASHID_C84011]
+Name = GD25D10B
+FirmwareSizeMax = 0x20000
 [CFI\FLASHID_C84012]
 Name = GD25Q20C
 FirmwareSizeMax = 0x40000
@@ -191,12 +219,48 @@ FirmwareSizeMax = 0x10000
 [CFI\FLASHID_EF3011]
 Name = W25X10CL
 FirmwareSizeMax = 0x20000
+[CFI\FLASHID_EF3012]
+Name = W25X20X
+FirmwareSizeMax = 0x40000
+[CFI\FLASHID_EF3013]
+Name = W25X40
+FirmwareSizeMax = 0x80000
+[CFI\FLASHID_EF3014]
+Name = W25X80
+FirmwareSizeMax = 0x100000
+[CFI\FLASHID_EF3015]
+Name = W25X16
+FirmwareSizeMax = 0x200000
+[CFI\FLASHID_EF3016]
+Name = W25X32
+FirmwareSizeMax = 0x400000
+[CFI\FLASHID_EF3017]
+Name = W25X64
+FirmwareSizeMax = 0x800000
+[CFI\FLASHID_EF4013]
+Name = W25Q40
+FirmwareSizeMax = 0x80000
+[CFI\FLASHID_EF4014]
+Name = W25Q80
+FirmwareSizeMax = 0x100000
+[CFI\FLASHID_EF4015]
+Name = W25Q16
+FirmwareSizeMax = 0x200000
+[CFI\FLASHID_EF4016]
+Name = W25Q32
+FirmwareSizeMax = 0x400000
+[CFI\FLASHID_EF4017]
+Name = W25Q64
+FirmwareSizeMax = 0x800000
 [CFI\FLASHID_EF4018]
 Name = W25Q128
 FirmwareSizeMax = 0x1000000
 [CFI\FLASHID_EF4019]
 Name = W25Q256
 FirmwareSizeMax = 0x2000000
+[CFI\FLASHID_EF4020]
+Name = W25Q512
+FirmwareSizeMax = 0x4000000
 
 # Fidelix
 [CFI\FLASHID_F8]

@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2018 Richard Hughes <richard@hughsie.com>
+ * Copyright 2018 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #define G_LOG_DOMAIN "FuRelease"
@@ -26,8 +26,9 @@ struct _FuRelease {
 	FuDevice *device;
 	FwupdRemote *remote;
 	FuEngineConfig *config;
-	GBytes *blob_fw;
+	GInputStream *stream;
 	gchar *update_request_id;
+	gchar *device_version_old;
 	GPtrArray *soft_reqs; /* nullable, element-type XbNode */
 	GPtrArray *hard_reqs; /* nullable, element-type XbNode */
 	guint64 priority;
@@ -42,36 +43,29 @@ gchar *
 fu_release_to_string(FuRelease *self)
 {
 	const guint idt = 1;
-	g_autofree gchar *tmp = NULL;
 	g_autoptr(GString) str = g_string_new(NULL);
 
 	g_return_val_if_fail(FU_IS_RELEASE(self), NULL);
 
 	/* parent */
-	tmp = fwupd_release_to_string(FWUPD_RELEASE(self));
-	if (tmp != NULL && tmp[0] != '\0')
-		g_string_append(str, tmp);
+	fwupd_codec_add_string(FWUPD_CODEC(self), 0, str);
 
 	/* instance */
-	if (self->request != NULL) {
-		fu_string_append(str, idt, "Request", NULL);
-		fu_engine_request_add_string(self->request, idt + 1, str);
-	}
+	if (self->request != NULL)
+		fwupd_codec_add_string(FWUPD_CODEC(self->request), idt, str);
 	if (self->device != NULL)
-		fu_string_append(str, idt, "Device", fu_device_get_id(self->device));
+		fwupd_codec_string_append(str, idt, "Device", fu_device_get_id(self->device));
+	fwupd_codec_string_append(str, idt, "DeviceVersionOld", self->device_version_old);
 	if (self->remote != NULL)
-		fu_string_append(str, idt, "Remote", fwupd_remote_get_id(self->remote));
-	fu_string_append_kb(str, idt, "HasConfig", self->config != NULL);
-	if (self->blob_fw != NULL)
-		fu_string_append_kx(str, idt, "BlobFwSz", g_bytes_get_size(self->blob_fw));
-	if (self->update_request_id != NULL)
-		fu_string_append(str, idt, "UpdateRequestId", self->update_request_id);
+		fwupd_codec_string_append(str, idt, "Remote", fwupd_remote_get_id(self->remote));
+	fwupd_codec_string_append_bool(str, idt, "HasConfig", self->config != NULL);
+	fwupd_codec_string_append_bool(str, idt, "HasStream", self->stream != NULL);
+	fwupd_codec_string_append(str, idt, "UpdateRequestId", self->update_request_id);
 	if (self->soft_reqs != NULL)
-		fu_string_append_kx(str, idt, "SoftReqs", self->soft_reqs->len);
+		fwupd_codec_string_append_hex(str, idt, "SoftReqs", self->soft_reqs->len);
 	if (self->hard_reqs != NULL)
-		fu_string_append_kx(str, idt, "HardReqs", self->hard_reqs->len);
-	if (self->priority != 0)
-		fu_string_append_kx(str, idt, "Priority", self->priority);
+		fwupd_codec_string_append_hex(str, idt, "HardReqs", self->hard_reqs->len);
+	fwupd_codec_string_append_hex(str, idt, "Priority", self->priority);
 	return g_string_free(g_steal_pointer(&str), FALSE);
 }
 
@@ -105,6 +99,34 @@ fu_release_get_request(FuRelease *self)
 }
 
 /**
+ * fu_release_get_device_version_old:
+ * @self: a #FuRelease
+ *
+ * Gets the original [before update] device version.
+ *
+ * Returns: a string value, or %NULL if never set.
+ **/
+const gchar *
+fu_release_get_device_version_old(FuRelease *self)
+{
+	g_return_val_if_fail(FU_IS_RELEASE(self), NULL);
+	return self->device_version_old;
+}
+
+static void
+fu_release_set_device_version_old(FuRelease *self, const gchar *device_version_old)
+{
+	g_return_if_fail(FU_IS_RELEASE(self));
+
+	/* not changed */
+	if (g_strcmp0(self->device_version_old, device_version_old) == 0)
+		return;
+
+	g_free(self->device_version_old);
+	self->device_version_old = g_strdup(device_version_old);
+}
+
+/**
  * fu_release_set_device:
  * @self: a #FuRelease
  * @device: (nullable): a #FuDevice
@@ -115,7 +137,12 @@ void
 fu_release_set_device(FuRelease *self, FuDevice *device)
 {
 	g_return_if_fail(FU_IS_RELEASE(self));
+
+	/* make tests easier */
+	fu_device_convert_instance_ids(device);
+
 	g_set_object(&self->device, device);
+	fu_release_set_device_version_old(self, fu_device_get_version(device));
 }
 
 /**
@@ -134,18 +161,18 @@ fu_release_get_device(FuRelease *self)
 }
 
 /**
- * fu_release_get_fw_blob:
+ * fu_release_get_stream:
  * @self: a #FuRelease
  *
- * Gets the firmware payload to use when installing this release.
+ * Gets the firmware stream to use when installing this release.
  *
  * Returns: (transfer none) (nullable): data
  **/
-GBytes *
-fu_release_get_fw_blob(FuRelease *self)
+GInputStream *
+fu_release_get_stream(FuRelease *self)
 {
 	g_return_val_if_fail(FU_IS_RELEASE(self), NULL);
-	return self->blob_fw;
+	return self->stream;
 }
 
 /**
@@ -273,7 +300,12 @@ fu_release_get_release_version(FuRelease *self, const gchar *version, GError **e
 		return g_strdup(version);
 
 	/* parse as integer */
-	if (!fu_strtoull(version, &ver_uint32, 1, G_MAXUINT32, &error_local)) {
+	if (!fu_strtoull(version,
+			 &ver_uint32,
+			 1,
+			 G_MAXUINT32,
+			 FU_INTEGER_BASE_AUTO,
+			 &error_local)) {
 		g_warning("invalid release version %s: %s", version, error_local->message);
 		return g_strdup(version);
 	}
@@ -303,8 +335,14 @@ fu_release_load_test_result(FuRelease *self, XbNode *n, GError **error)
 	if (tmp != NULL)
 		fwupd_report_set_device_name(report, tmp);
 	tmp = xb_node_query_text(n, "previous_version", NULL);
-	if (tmp != NULL)
+	if (tmp != NULL) {
 		fwupd_report_set_version_old(report, tmp);
+		if (fu_version_compare(fu_release_get_version(self),
+				       tmp,
+				       FWUPD_VERSION_FORMAT_UNKNOWN) > 0) {
+			fwupd_report_add_flag(report, FWUPD_REPORT_FLAG_IS_UPGRADE);
+		}
+	}
 	vendor_name = xb_node_query_first(n, "vendor_name", NULL);
 	if (vendor_name != NULL) {
 		guint64 vendor_id = xb_node_get_attr_as_uint(vendor_name, "id");
@@ -322,6 +360,8 @@ fu_release_load_test_result(FuRelease *self, XbNode *n, GError **error)
 			fwupd_report_set_distro_variant(report, tmp);
 		fwupd_report_set_distro_id(report, xb_node_get_text(os));
 	}
+	if (fu_release_get_remote_id(self) != NULL)
+		fwupd_report_set_remote_id(report, fu_release_get_remote_id(self));
 	custom = xb_node_query(n, "custom/value", 0, NULL);
 	if (custom != NULL) {
 		for (guint i = 0; i < custom->len; i++) {
@@ -372,15 +412,18 @@ fu_release_load_artifact(FuRelease *self, XbNode *artifact, GError **error)
 	if (locations != NULL) {
 		for (guint i = 0; i < locations->len; i++) {
 			XbNode *n = g_ptr_array_index(locations, i);
-			g_autofree gchar *scheme = NULL;
 
 			/* check the scheme is allowed */
-			scheme = fu_release_uri_get_scheme(xb_node_get_text(n));
-			if (scheme != NULL) {
-				guint prio =
-				    fu_engine_config_get_uri_scheme_prio(self->config, scheme);
-				if (prio == G_MAXUINT)
-					continue;
+			if (self->config != NULL) {
+				g_autofree gchar *scheme =
+				    fu_release_uri_get_scheme(xb_node_get_text(n));
+				if (scheme != NULL) {
+					guint prio =
+					    fu_engine_config_get_uri_scheme_prio(self->config,
+										 scheme);
+					if (prio == G_MAXUINT)
+						continue;
+				}
 			}
 
 			/* build the complete URI */
@@ -634,19 +677,6 @@ fu_release_check_requirements(FuRelease *self,
 		return FALSE;
 	}
 
-	/* called with online update, test if device is supposed to allow this */
-	if ((install_flags & FWUPD_INSTALL_FLAG_OFFLINE) == 0 &&
-	    (install_flags & FWUPD_INSTALL_FLAG_FORCE) == 0 &&
-	    fu_device_has_flag(self->device, FWUPD_DEVICE_FLAG_ONLY_OFFLINE)) {
-		g_set_error(error,
-			    FWUPD_ERROR,
-			    FWUPD_ERROR_NOT_SUPPORTED,
-			    "Device %s [%s] only allows offline updates",
-			    fu_device_get_name(self->device),
-			    fu_device_get_id(self->device));
-		return FALSE;
-	}
-
 	/* get device */
 	version = fu_device_get_version(self->device);
 	if (version == NULL) {
@@ -682,7 +712,7 @@ fu_release_check_requirements(FuRelease *self,
 			    FWUPD_ERROR_NOT_SUPPORTED,
 			    "Specified firmware is older than the minimum "
 			    "required version '%s < %s'",
-			    version,
+			    fu_release_get_version(self),
 			    version_lowest);
 		return FALSE;
 	}
@@ -732,14 +762,20 @@ fu_release_set_priority(FuRelease *self, guint64 priority)
 	self->priority = priority;
 }
 
-static void
-fu_release_ensure_device_version(FuRelease *self, XbNode *rel)
+guint64
+fu_release_get_priority(FuRelease *self)
 {
-	const gchar *rel_version = xb_node_get_attr(rel, "version");
+	g_return_val_if_fail(FU_IS_RELEASE(self), 0);
+	return self->priority;
+}
+
+static void
+fu_release_ensure_device_by_checksum(FuRelease *self, XbNode *component, XbNode *rel)
+{
 	g_autoptr(GPtrArray) device_checksums = NULL;
 
 	/* sanity check */
-	if (rel_version == NULL)
+	if (fu_device_get_checksums(self->device)->len == 0)
 		return;
 	device_checksums = xb_node_query(rel, "checksum[@target='device']", 0, NULL);
 	if (device_checksums == NULL)
@@ -748,9 +784,16 @@ fu_release_ensure_device_version(FuRelease *self, XbNode *rel)
 		XbNode *device_checksum = g_ptr_array_index(device_checksums, i);
 		if (!fu_device_has_checksum(self->device, xb_node_get_text(device_checksum)))
 			continue;
-		fu_device_set_version(self->device, rel_version);
-		fu_device_remove_internal_flag(self->device,
-					       FU_DEVICE_INTERNAL_FLAG_MD_SET_VERSION);
+		fu_device_ensure_from_component(self->device, component);
+		if (fu_device_has_private_flag(self->device,
+					       FU_DEVICE_PRIVATE_FLAG_MD_SET_VERSION)) {
+			const gchar *rel_version = xb_node_get_attr(rel, "version");
+			if (rel_version == NULL)
+				continue;
+			fu_device_set_version(self->device, rel_version);
+			fu_device_remove_private_flag(self->device,
+						      FU_DEVICE_PRIVATE_FLAG_MD_SET_VERSION);
+		}
 		break;
 	}
 }
@@ -758,6 +801,7 @@ fu_release_ensure_device_version(FuRelease *self, XbNode *rel)
 /**
  * fu_release_load:
  * @self: a #FuRelease
+ * @cabinet: a #FuCabinet
  * @component: (not nullable): a #XbNode
  * @rel_optional: (nullable): a #XbNode
  * @install_flags: a #FwupdInstallFlags, e.g. %FWUPD_INSTALL_FLAG_FORCE
@@ -771,6 +815,7 @@ fu_release_ensure_device_version(FuRelease *self, XbNode *rel)
  **/
 gboolean
 fu_release_load(FuRelease *self,
+		FuCabinet *cabinet,
 		XbNode *component,
 		XbNode *rel_optional,
 		FwupdInstallFlags install_flags,
@@ -778,7 +823,7 @@ fu_release_load(FuRelease *self,
 {
 	const gchar *tmp;
 	guint64 tmp64;
-	GBytes *blob_fw_tmp;
+	GBytes *blob_basename;
 	g_autofree gchar *name_xpath = NULL;
 	g_autofree gchar *namevs_xpath = NULL;
 	g_autofree gchar *summary_xpath = NULL;
@@ -793,10 +838,10 @@ fu_release_load(FuRelease *self,
 	g_autoptr(GError) error_hard = NULL;
 
 	g_return_val_if_fail(FU_IS_RELEASE(self), FALSE);
+	g_return_val_if_fail(cabinet == NULL || FU_IS_CABINET(cabinet), FALSE);
 	g_return_val_if_fail(XB_IS_NODE(component), FALSE);
 	g_return_val_if_fail(rel_optional == NULL || XB_IS_NODE(rel_optional), FALSE);
 	g_return_val_if_fail(error == NULL || *error == NULL, FALSE);
-	g_return_val_if_fail(fwupd_release_get_appstream_id(FWUPD_RELEASE(self)) == NULL, FALSE);
 
 	/* set from the component */
 	tmp = xb_node_query_text(component, "id", NULL);
@@ -826,14 +871,10 @@ fu_release_load(FuRelease *self,
 	tmp = xb_node_query_text(component, "developer_name", NULL);
 	if (tmp != NULL)
 		fwupd_release_set_vendor(FWUPD_RELEASE(self), tmp);
-	tmp64 = xb_node_get_attr_as_uint(component, "priority");
-	if (tmp64 != G_MAXUINT64)
-		fu_release_set_priority(self, tmp64);
 
 	/* use default release */
 	if (rel_optional == NULL) {
 		g_autoptr(GError) error_local = NULL;
-#if LIBXMLB_CHECK_VERSION(0, 2, 0)
 		g_autoptr(XbQuery) query = NULL;
 		query = xb_query_new_full(xb_node_get_silo(component),
 					  "releases/release",
@@ -842,9 +883,6 @@ fu_release_load(FuRelease *self,
 		if (query == NULL)
 			return FALSE;
 		rel = xb_node_query_first_full(component, query, &error_local);
-#else
-		rel = xb_node_query_first(component, "releases/release", &error_local);
-#endif
 		if (rel == NULL) {
 			g_set_error(error,
 				    FWUPD_ERROR,
@@ -862,19 +900,28 @@ fu_release_load(FuRelease *self,
 	if (tmp != NULL)
 		fwupd_release_set_remote_id(FWUPD_RELEASE(self), tmp);
 	tmp = xb_node_query_text(component, "../custom/value[@key='LVFS::Distributor']", NULL);
-	if (g_strcmp0(tmp, "community") == 0)
+	if (tmp != NULL && g_str_has_prefix(tmp, "community"))
 		fwupd_release_add_flag(FWUPD_RELEASE(self), FWUPD_RELEASE_FLAG_IS_COMMUNITY);
 
 	/* use the metadata to set the device attributes */
 	if (!fu_release_ensure_trust_flags(self, rel, error))
 		return FALSE;
-	if (self->device != NULL && fu_release_has_flag(self, FWUPD_RELEASE_FLAG_TRUSTED_METADATA))
-		fu_device_ensure_from_component(self->device, component);
-
-	/* use the metadata to set the device version */
 	if (self->device != NULL &&
-	    fu_device_has_internal_flag(self->device, FU_DEVICE_INTERNAL_FLAG_MD_SET_VERSION))
-		fu_release_ensure_device_version(self, rel);
+	    fu_release_has_flag(self, FWUPD_RELEASE_FLAG_TRUSTED_METADATA)) {
+		if (fu_device_has_private_flag(self->device,
+					       FU_DEVICE_PRIVATE_FLAG_MD_ONLY_CHECKSUM)) {
+			fu_release_ensure_device_by_checksum(self, component, rel);
+		} else {
+			fu_device_ensure_from_component(self->device, component);
+		}
+	}
+
+	/* per-release priority wins, but fallback to per-component priority */
+	tmp64 = xb_node_get_attr_as_uint(rel, "priority");
+	if (tmp64 == G_MAXUINT64)
+		tmp64 = xb_node_get_attr_as_uint(component, "priority");
+	if (tmp64 != G_MAXUINT64)
+		fu_release_set_priority(self, tmp64);
 
 	/* the version is fixed up with the device format */
 	tmp = xb_node_get_attr(rel, "version");
@@ -1075,10 +1122,20 @@ fu_release_load(FuRelease *self,
 		}
 	}
 
-	/* get per-release firmware blob */
-	blob_fw_tmp = xb_node_get_data(rel, "fwupd::FirmwareBlob");
-	if (blob_fw_tmp != NULL)
-		self->blob_fw = g_bytes_ref(blob_fw_tmp);
+	/* get per-release firmware stream */
+	blob_basename = xb_node_get_data(rel, "fwupd::FirmwareBasename");
+	if (cabinet != NULL && blob_basename != NULL) {
+		const gchar *basename = (const gchar *)g_bytes_get_data(blob_basename, NULL);
+		g_autoptr(FuFirmware) img = NULL;
+		img = fu_firmware_get_image_by_id(FU_FIRMWARE(cabinet), basename, error);
+		if (img == NULL) {
+			g_prefix_error(error, "failed to find %s: ", basename);
+			return FALSE;
+		}
+		self->stream = fu_firmware_get_stream(img, error);
+		if (self->stream == NULL)
+			return FALSE;
+	}
 
 	/* to build the firmware */
 	tmp = g_object_get_data(G_OBJECT(component), "fwupd::BuilderScript");
@@ -1144,18 +1201,14 @@ fu_release_ensure_trust_flags(FuRelease *self, XbNode *rel, GError **error)
 
 	/* do not require signatures for anything installed to the immutable datadir */
 	if (fu_release_get_flags(self) == FWUPD_RELEASE_FLAG_NONE && self->remote != NULL) {
-		if (fwupd_remote_get_keyring_kind(self->remote) == FWUPD_KEYRING_KIND_NONE &&
-		    (fwupd_remote_get_kind(self->remote) == FWUPD_REMOTE_KIND_LOCAL ||
-		     fwupd_remote_get_kind(self->remote) == FWUPD_REMOTE_KIND_DIRECTORY)) {
-			g_info("remote %s has kind=%s and Keyring=none and so marking as trusted",
-			       fwupd_remote_get_id(self->remote),
-			       fwupd_remote_kind_to_string(fwupd_remote_get_kind(self->remote)));
+		g_debug("remote %s has kind=%s and so marking as trusted",
+			fwupd_remote_get_id(self->remote),
+			fwupd_remote_kind_to_string(fwupd_remote_get_kind(self->remote)));
+		if (fwupd_remote_get_kind(self->remote) == FWUPD_REMOTE_KIND_LOCAL ||
+		    fwupd_remote_get_kind(self->remote) == FWUPD_REMOTE_KIND_DIRECTORY) {
 			fu_release_add_flag(self, FWUPD_RELEASE_FLAG_TRUSTED_PAYLOAD);
 			fu_release_add_flag(self, FWUPD_RELEASE_FLAG_TRUSTED_METADATA);
-		} else if (fwupd_remote_get_keyring_kind(self->remote) != FWUPD_KEYRING_KIND_NONE) {
-			g_info("remote %s has kind=%s and so marking as trusted",
-			       fwupd_remote_get_id(self->remote),
-			       fwupd_remote_kind_to_string(fwupd_remote_get_kind(self->remote)));
+		} else {
 			fu_release_add_flag(self, FWUPD_RELEASE_FLAG_TRUSTED_METADATA);
 		}
 	}
@@ -1214,10 +1267,12 @@ fu_release_compare(FuRelease *release1, FuRelease *release2)
 	FuDevice *device2 = fu_release_get_device(release2);
 
 	/* device order, lower is better */
-	if (fu_device_get_order(device1) < fu_device_get_order(device2))
-		return -1;
-	if (fu_device_get_order(device1) > fu_device_get_order(device2))
-		return 1;
+	if (device1 != NULL && device2 != NULL && device1 != device2) {
+		if (fu_device_get_order(device1) < fu_device_get_order(device2))
+			return -1;
+		if (fu_device_get_order(device1) > fu_device_get_order(device2))
+			return 1;
+	}
 
 	/* release priority, higher is better */
 	if (release1->priority > release2->priority)
@@ -1226,7 +1281,7 @@ fu_release_compare(FuRelease *release1, FuRelease *release2)
 		return 1;
 
 	/* remote priority, higher is better */
-	if (release1->remote != NULL && release2->remote) {
+	if (release1->remote != NULL && release2->remote != NULL) {
 		if (fwupd_remote_get_priority(release1->remote) >
 		    fwupd_remote_get_priority(release2->remote))
 			return -1;
@@ -1235,7 +1290,10 @@ fu_release_compare(FuRelease *release1, FuRelease *release2)
 			return 1;
 	}
 
-	return 0;
+	/* FWUPD_DEVICE_FLAG_INSTALL_ALL_RELEASES has to be from oldest to newest */
+	return fu_version_compare(fu_release_get_version(release1),
+				  fu_release_get_version(release2),
+				  fu_device_get_version_format(device1));
 }
 
 static void
@@ -1250,6 +1308,7 @@ fu_release_finalize(GObject *obj)
 	FuRelease *self = FU_RELEASE(obj);
 
 	g_free(self->update_request_id);
+	g_free(self->device_version_old);
 	if (self->request != NULL)
 		g_object_unref(self->request);
 	if (self->device != NULL)
@@ -1258,8 +1317,8 @@ fu_release_finalize(GObject *obj)
 		g_object_unref(self->remote);
 	if (self->config != NULL)
 		g_object_unref(self->config);
-	if (self->blob_fw != NULL)
-		g_bytes_unref(self->blob_fw);
+	if (self->stream != NULL)
+		g_object_unref(self->stream);
 	if (self->soft_reqs != NULL)
 		g_ptr_array_unref(self->soft_reqs);
 	if (self->hard_reqs != NULL)

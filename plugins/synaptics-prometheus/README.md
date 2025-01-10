@@ -20,7 +20,6 @@ This plugin supports the following protocol ID:
 
 These devices use the standard USB DeviceInstanceId values, e.g.
 
-* `USB\VID_06CB&PID_00A9&REV_0001`
 * `USB\VID_06CB&PID_00A9`
 * `USB\VID_06CB&PID_00A9-cfg`
 * `USB\VID_06CB&PID_00A9&CFG1_3483&CFG2_500`
@@ -42,3 +41,10 @@ This plugin requires read/write access to `/dev/bus/usb`.
 ## Version Considerations
 
 This plugin has been available since fwupd version `1.2.9`.
+
+## Owners
+
+Anyone can submit a pull request to modify this plugin, but the following people should be
+consulted before making major or functional changes:
+
+* Vincent Huang: @synavincent

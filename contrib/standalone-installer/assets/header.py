@@ -1,8 +1,8 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 #
-# Copyright (C) 2017 Dell, Inc.
+# Copyright 2017 Dell, Inc.
 #
-# SPDX-License-Identifier: LGPL-2.1+
+# SPDX-License-Identifier: LGPL-2.1-or-later
 #
 from base64 import b64decode
 import io
@@ -92,7 +92,7 @@ def copy_cabs(source, target):
 
 def install_snap(directory, verbose, allow_reinstall, allow_older, uninstall):
     app = "fwupd"
-    common = "/root/snap/%s/common" % app
+    common = f"/root/snap/{app}/common"
 
     # check if snap is installed
     with open(os.devnull, "w") as devnull:
@@ -125,7 +125,7 @@ def install_snap(directory, verbose, allow_reinstall, allow_older, uninstall):
 
     # run the snap
     for cab in cabs:
-        cmd = ["%s.fwupdmgr" % app, "install", cab]
+        cmd = [f"{app}.fwupdmgr", "install", cab]
         if allow_reinstall:
             cmd += ["--allow-reinstall"]
         if allow_older:
@@ -149,7 +149,7 @@ def install_snap(directory, verbose, allow_reinstall, allow_older, uninstall):
 
 def install_flatpak(directory, verbose, allow_reinstall, allow_older, uninstall):
     app = "org.freedesktop.fwupd"
-    common = "%s/.var/app/%s" % (os.getenv("HOME"), app)
+    common = f"{os.getenv('HOME')}/.var/app/{app}"
 
     with open(os.devnull, "w") as devnull:
         if not verbose:
@@ -253,7 +253,7 @@ def use_included_version(minimum_version):
             )
             return False
     else:
-        print("fwupd %s is installed and must be removed" % version.version)
+        print(f"fwupd {version.version} is installed and must be removed")
     return remove_packaged_version(pkg, cache)
 
 
@@ -302,7 +302,7 @@ def run_installation(directory, verbose, allow_reinstall, allow_older, uninstall
     minimum_path = os.path.join(directory, "minimum")
     minimum = None
     if os.path.exists(minimum_path):
-        with open(minimum_path, "r") as rfd:
+        with open(minimum_path) as rfd:
             minimum = rfd.read()
 
     if not use_included_version(minimum):
@@ -340,14 +340,14 @@ if __name__ == "__main__":
             )
         if args.allow_older:
             error(
-                "allow-older argument doesn't make sense with command %s" % args.command
+                f"allow-older argument doesn't make sense with command {args.command}"
             )
         if args.cleanup:
-            error("Cleanup argument doesn't make sense with command %s" % args.command)
+            error(f"Cleanup argument doesn't make sense with command {args.command}")
         if args.directory is None:
             error("No directory specified")
         if not os.path.exists(args.directory):
-            print("Creating %s" % args.directory)
+            print(f"Creating {args.directory}")
             os.makedirs(args.directory)
         unzip(args.directory)
     else:

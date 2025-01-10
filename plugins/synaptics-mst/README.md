@@ -18,7 +18,14 @@ This plugin supports the following protocol ID:
 
 ## GUID Generation
 
-These devices use custom GUID values, e.g.
+These devices use the standard DPAUX GUID values, e.g.
+
+* `DPAUX\OUI_0090CC24` (only-quirk)
+* `DPAUX\OUI_0090CC24&HWREV_10` (only-quirk)
+* `DPAUX\OUI_0090CC24&HWREV_10&DEVID_SYNAB2` (only-quirk)
+* `DPAUX\OUI_0090CC24&DEVID_SYNAB2` (only-quirk)
+
+These devices also use custom GUID values, e.g.
 
 * `MST-$(board-ID)`
 * `MST-$(device_kind)-$(chip-ID)-$(board-ID)`
@@ -37,6 +44,22 @@ MST device may not enumerate if there is no monitor actually plugged in.
 ## Vendor ID Security
 
 The vendor ID is set from the PCI vendor, for example set to `DRM_DP_AUX_DEV:0x$(vid)`
+
+## Quirk Use
+
+This plugin uses the following plugin-specific quirks:
+
+### SynapticsMstDeviceKind
+
+The comma-seporated kind of device, e.g. `system` or `wd15,tb16,tb18`
+
+### Flags:manual-restart-required
+
+The device must be restarted manually after the update has completed.
+
+### Flags:ignore-board-id
+
+Ignore board ID firmware mismatch.
 
 ## Requirements
 
@@ -96,3 +119,31 @@ This plugin requires read/write access to `/dev/drm_dp_aux*`.
 ## Version Considerations
 
 This plugin has been available since fwupd version `1.3.6`.
+
+## Data Flow
+
+```mermaid
+  flowchart LR
+      subgraph MST Controller
+        MST(Controller)
+        SPI[(SPI)]
+      end
+      subgraph Kernel
+        gpu(GPU\ndriver)
+      end
+      subgraph fwupd Process
+        fwupdengine(FuEngine)
+        mst_plugin(Synaptics MST\nPlugin)
+      end
+      fwupdengine-->mst_plugin
+      mst_plugin<--/dev/drm_dp_aux-->gpu
+      gpu<--DDC/I2C-->MST
+      MST---SPI
+```
+
+## Owners
+
+Anyone can submit a pull request to modify this plugin, but the following people should be
+consulted before making major or functional changes:
+
+* Apollo Ling: @ApolloLing

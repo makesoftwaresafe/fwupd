@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2015 Richard Hughes <richard@hughsie.com>
+ * Copyright 2015 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 /**
@@ -16,8 +16,6 @@
  */
 
 #include "config.h"
-
-#include <fwupdplugin.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -108,19 +106,6 @@ fu_dfu_sector_has_cap(FuDfuSector *self, FuDfuSectorCap cap)
 	FuDfuSectorPrivate *priv = GET_PRIVATE(self);
 	g_return_val_if_fail(FU_IS_DFU_SECTOR(self), FALSE);
 	return (priv->cap & cap) > 0;
-}
-
-static gchar *
-fu_dfu_sector_cap_to_string(FuDfuSectorCap cap)
-{
-	GString *str = g_string_new(NULL);
-	if (cap & DFU_SECTOR_CAP_READABLE)
-		g_string_append(str, "R");
-	if (cap & DFU_SECTOR_CAP_ERASABLE)
-		g_string_append(str, "E");
-	if (cap & DFU_SECTOR_CAP_WRITEABLE)
-		g_string_append(str, "W");
-	return g_string_free(str, FALSE);
 }
 
 gchar *

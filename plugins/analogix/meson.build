@@ -1,5 +1,5 @@
-if gusb.found()
 cargs = ['-DG_LOG_DOMAIN="FuPluginAnalogix"']
+plugins += {meson.current_source_dir().split('/')[-1]: true}
 
 plugin_quirks += files('analogix.quirk')
 plugin_builtins += static_library('fu_plugin_analogix',
@@ -14,4 +14,7 @@ plugin_builtins += static_library('fu_plugin_analogix',
   c_args: cargs,
   dependencies: plugin_deps,
 )
-endif
+
+device_tests += files(
+  'tests/analogix-anx7518.json',
+)

@@ -1,13 +1,15 @@
 /*
- * Copyright (C) 2021 Jimmy Yu <Jimmy_yu@pixart.com>
- * Copyright (C) 2021 Richard Hughes <richard@hughsie.com>
+ * Copyright 2021 Jimmy Yu <Jimmy_yu@pixart.com>
+ * Copyright 2021 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #pragma once
 
 #include <fwupdplugin.h>
+
+#define FU_PXI_DEVICE_FLAG_IS_HPAC "is-hpac"
 
 #define PXI_HID_WIRELESS_DEV_OTA_REPORT_ID 0x03
 
@@ -25,6 +27,7 @@
 #define FU_PXI_DEVICE_CMD_FW_OTA_PAYLOAD_CONTENT   0x40u
 #define FU_PXI_DEVICE_CMD_FW_OTA_CHECK_CRC	   0x41u
 #define FU_PXI_DEVICE_CMD_FW_OTA_INIT_NEW_CHECK	   0x42u
+#define FU_PXI_DEVICE_CMD_FW_OTA_PRECEDING	   0x44u
 
 #define FU_PXI_BLE_DEVICE_RF_CMD_CODE	0x65u
 #define FU_PXI_BLE_DEVICE_RF_CMD_HID_SN 0x0
@@ -98,3 +101,6 @@ fu_pxi_ota_fw_state_parse(struct ota_fw_state *fwstate,
 			  gsize bufsz,
 			  gsize offset,
 			  GError **error);
+
+gchar *
+fu_pxi_hpac_version_info_parse(const guint16 hpac_ver);

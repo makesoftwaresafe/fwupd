@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2021 Sergii Dmytruk <sergii.dmytruk@3mdeb.com>
+ * Copyright 2021 Sergii Dmytruk <sergii.dmytruk@3mdeb.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #define G_LOG_DOMAIN "FuCommon"
@@ -12,12 +12,8 @@
 #include <string.h>
 #include <unistd.h>
 
-#ifdef HAVE_FNMATCH_H
-#include <fnmatch.h>
-#endif
-
 #include "fu-common-private.h"
-#include "fu-path-private.h"
+#include "fu-kenv.h"
 
 /* bsdisks doesn't provide Manager object */
 #define UDISKS_DBUS_PATH	      "/org/freedesktop/UDisks2"
@@ -111,18 +107,14 @@ fu_common_get_block_devices(GError **error)
 	return g_steal_pointer(&devices);
 }
 
-gboolean
-fu_path_fnmatch_impl(const gchar *pattern, const gchar *str)
-{
-#ifdef HAVE_FNMATCH_H
-	return fnmatch(pattern, str, FNM_NOESCAPE) == 0;
-#else
-	return g_strcmp0(pattern, str) == 0;
-#endif
-}
-
 guint64
 fu_common_get_memory_size_impl(void)
 {
 	return (guint64)sysconf(_SC_PHYS_PAGES) * (guint64)sysconf(_SC_PAGE_SIZE);
+}
+
+gchar *
+fu_common_get_kernel_cmdline_impl(GError **error)
+{
+	return fu_kenv_get_string("kernel_options", error);
 }

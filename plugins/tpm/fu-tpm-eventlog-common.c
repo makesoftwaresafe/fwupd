@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2019 Richard Hughes <richard@hughsie.com>
+ * Copyright 2019 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #include "config.h"
@@ -51,6 +51,8 @@ fu_tpm_eventlog_hash_get_size(TPM2_ALG_ID hash_kind)
 		return TPM2_SHA384_DIGEST_SIZE;
 	if (hash_kind == TPM2_ALG_SHA512)
 		return TPM2_SHA512_DIGEST_SIZE;
+	if (hash_kind == TPM2_ALG_SM3_256)
+		return TPM2_SM3_256_DIGEST_SIZE;
 	return 0;
 }
 
@@ -90,8 +92,8 @@ fu_tpm_eventlog_calc_checksums(GPtrArray *items, guint8 pcr, GError **error)
 	/* sanity check */
 	if (items->len == 0) {
 		g_set_error_literal(error,
-				    G_IO_ERROR,
-				    G_IO_ERROR_INVALID_DATA,
+				    FWUPD_ERROR,
+				    FWUPD_ERROR_INVALID_DATA,
 				    "no event log data");
 		return NULL;
 	}
@@ -107,11 +109,9 @@ fu_tpm_eventlog_calc_checksums(GPtrArray *items, guint8 pcr, GError **error)
 		if (item->kind == FU_TPM_EVENTLOG_ITEM_KIND_EV_NO_ACTION && item->pcr == 0 &&
 		    item->blob != NULL && i == 0) {
 			g_autoptr(GByteArray) st_loc = NULL;
-			st_loc = fu_struct_tpm_efi_startup_locality_event_parse(
-			    g_bytes_get_data(item->blob, NULL),
-			    g_bytes_get_size(item->blob),
-			    0x0,
-			    NULL);
+			st_loc = fu_struct_tpm_efi_startup_locality_event_parse_bytes(item->blob,
+										      0x0,
+										      NULL);
 			if (st_loc != NULL) {
 				guint8 locality =
 				    fu_struct_tpm_efi_startup_locality_event_get_locality(st_loc);
@@ -159,8 +159,8 @@ fu_tpm_eventlog_calc_checksums(GPtrArray *items, guint8 pcr, GError **error)
 	}
 	if (cnt_sha1 == 0 && cnt_sha256 == 0 && cnt_sha384 == 0) {
 		g_set_error_literal(error,
-				    G_IO_ERROR,
-				    G_IO_ERROR_INVALID_DATA,
+				    FWUPD_ERROR,
+				    FWUPD_ERROR_INVALID_DATA,
 				    "no SHA1, SHA256, or SHA384 data");
 		return NULL;
 	}

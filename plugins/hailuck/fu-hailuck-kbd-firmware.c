@@ -1,12 +1,10 @@
 /*
- * Copyright (C) 2020 Richard Hughes <richard@hughsie.com>
+ * Copyright 2020 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #include "config.h"
-
-#include <fwupdplugin.h>
 
 #include "fu-hailuck-kbd-firmware.h"
 
@@ -18,8 +16,7 @@ G_DEFINE_TYPE(FuHailuckKbdFirmware, fu_hailuck_kbd_firmware, FU_TYPE_IHEX_FIRMWA
 
 static gboolean
 fu_hailuck_kbd_firmware_parse(FuFirmware *firmware,
-			      GBytes *fw,
-			      gsize offset,
+			      GInputStream *stream,
 			      FwupdInstallFlags flags,
 			      GError **error)
 {
@@ -79,7 +76,7 @@ fu_hailuck_kbd_firmware_parse(FuFirmware *firmware,
 	}
 
 	/* whole image */
-	fw_new = g_byte_array_free_to_bytes(g_steal_pointer(&buf));
+	fw_new = g_bytes_new(buf->data, buf->len);
 	fu_firmware_set_bytes(firmware, fw_new);
 	return TRUE;
 }
@@ -87,11 +84,12 @@ fu_hailuck_kbd_firmware_parse(FuFirmware *firmware,
 static void
 fu_hailuck_kbd_firmware_init(FuHailuckKbdFirmware *self)
 {
+	fu_firmware_add_flag(FU_FIRMWARE(self), FU_FIRMWARE_FLAG_NO_AUTO_DETECTION);
 }
 
 static void
 fu_hailuck_kbd_firmware_class_init(FuHailuckKbdFirmwareClass *klass)
 {
-	FuFirmwareClass *klass_firmware = FU_FIRMWARE_CLASS(klass);
-	klass_firmware->parse = fu_hailuck_kbd_firmware_parse;
+	FuFirmwareClass *firmware_class = FU_FIRMWARE_CLASS(klass);
+	firmware_class->parse = fu_hailuck_kbd_firmware_parse;
 }

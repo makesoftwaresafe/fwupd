@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2019 Richard Hughes <richard@hughsie.com>
+ * Copyright 2019 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #define G_LOG_DOMAIN "FuFirmware"
@@ -166,26 +166,6 @@ fu_ihex_firmware_record_new(guint ln, const gchar *line, FwupdInstallFlags flags
 	return g_steal_pointer(&rcd);
 }
 
-static const gchar *
-fu_ihex_firmware_record_type_to_string(guint8 record_type)
-{
-	if (record_type == FU_IHEX_FIRMWARE_RECORD_TYPE_DATA)
-		return "DATA";
-	if (record_type == FU_IHEX_FIRMWARE_RECORD_TYPE_EOF)
-		return "EOF";
-	if (record_type == FU_IHEX_FIRMWARE_RECORD_TYPE_EXTENDED_SEGMENT)
-		return "EXTENDED_SEGMENT";
-	if (record_type == FU_IHEX_FIRMWARE_RECORD_TYPE_START_SEGMENT)
-		return "START_SEGMENT";
-	if (record_type == FU_IHEX_FIRMWARE_RECORD_TYPE_EXTENDED_LINEAR)
-		return "EXTENDED_LINEAR";
-	if (record_type == FU_IHEX_FIRMWARE_RECORD_TYPE_START_LINEAR)
-		return "ADDR32";
-	if (record_type == FU_IHEX_FIRMWARE_RECORD_TYPE_SIGNATURE)
-		return "SIGNATURE";
-	return NULL;
-}
-
 typedef struct {
 	FuIhexFirmware *self;
 	FwupdInstallFlags flags;
@@ -201,8 +181,8 @@ fu_ihex_firmware_tokenize_cb(GString *token, guint token_idx, gpointer user_data
 	/* sanity check */
 	if (token_idx > FU_IHEX_FIRMWARE_TOKENS_MAX) {
 		g_set_error_literal(error,
-				    G_IO_ERROR,
-				    G_IO_ERROR_INVALID_DATA,
+				    FWUPD_ERROR,
+				    FWUPD_ERROR_INVALID_DATA,
 				    "file has too many lines");
 		return FALSE;
 	}
@@ -230,22 +210,19 @@ fu_ihex_firmware_tokenize_cb(GString *token, guint token_idx, gpointer user_data
 }
 
 static gboolean
-fu_ihex_firmware_tokenize(FuFirmware *firmware, GBytes *fw, FwupdInstallFlags flags, GError **error)
+fu_ihex_firmware_tokenize(FuFirmware *firmware,
+			  GInputStream *stream,
+			  FwupdInstallFlags flags,
+			  GError **error)
 {
 	FuIhexFirmware *self = FU_IHEX_FIRMWARE(firmware);
 	FuIhexFirmwareTokenHelper helper = {.self = self, .flags = flags};
-	return fu_strsplit_full(g_bytes_get_data(fw, NULL),
-				g_bytes_get_size(fw),
-				"\n",
-				fu_ihex_firmware_tokenize_cb,
-				&helper,
-				error);
+	return fu_strsplit_stream(stream, 0x0, "\n", fu_ihex_firmware_tokenize_cb, &helper, error);
 }
 
 static gboolean
 fu_ihex_firmware_parse(FuFirmware *firmware,
-		       GBytes *fw,
-		       gsize offset,
+		       GInputStream *stream,
 		       FwupdInstallFlags flags,
 		       GError **error)
 {
@@ -421,7 +398,8 @@ fu_ihex_firmware_parse(FuFirmware *firmware,
 				g_autoptr(FuFirmware) img_sig =
 				    fu_firmware_new_from_bytes(data_sig);
 				fu_firmware_set_id(img_sig, FU_FIRMWARE_ID_SIGNATURE);
-				fu_firmware_add_image(firmware, img_sig);
+				if (!fu_firmware_add_image_full(firmware, img_sig, error))
+					return FALSE;
 			}
 			got_sig = TRUE;
 			break;
@@ -512,9 +490,10 @@ fu_ihex_firmware_image_to_string(GBytes *bytes,
 	return TRUE;
 }
 
-static GBytes *
+static GByteArray *
 fu_ihex_firmware_write(FuFirmware *firmware, GError **error)
 {
+	g_autoptr(GByteArray) buf = g_byte_array_new();
 	g_autoptr(GBytes) fw = NULL;
 	g_autoptr(FuFirmware) img_sig = NULL;
 	g_autoptr(GString) str = g_string_new("");
@@ -546,7 +525,8 @@ fu_ihex_firmware_write(FuFirmware *firmware, GError **error)
 
 	/* add EOF */
 	fu_ihex_firmware_emit_chunk(str, 0x0, FU_IHEX_FIRMWARE_RECORD_TYPE_EOF, NULL, 0);
-	return g_bytes_new(str->str, str->len);
+	g_byte_array_append(buf, (const guint8 *)str->str, str->len);
+	return g_steal_pointer(&buf);
 }
 
 static void
@@ -565,17 +545,18 @@ fu_ihex_firmware_init(FuIhexFirmware *self)
 	priv->padding_value = 0x00; /* chosen as we can't write 0xffff to PIC14 */
 	priv->records = g_ptr_array_new_with_free_func((GFreeFunc)fu_ihex_firmware_record_free);
 	fu_firmware_add_flag(FU_FIRMWARE(self), FU_FIRMWARE_FLAG_HAS_CHECKSUM);
+	fu_firmware_set_images_max(FU_FIRMWARE(self), 10);
 }
 
 static void
 fu_ihex_firmware_class_init(FuIhexFirmwareClass *klass)
 {
 	GObjectClass *object_class = G_OBJECT_CLASS(klass);
-	FuFirmwareClass *klass_firmware = FU_FIRMWARE_CLASS(klass);
+	FuFirmwareClass *firmware_class = FU_FIRMWARE_CLASS(klass);
 	object_class->finalize = fu_ihex_firmware_finalize;
-	klass_firmware->parse = fu_ihex_firmware_parse;
-	klass_firmware->tokenize = fu_ihex_firmware_tokenize;
-	klass_firmware->write = fu_ihex_firmware_write;
+	firmware_class->parse = fu_ihex_firmware_parse;
+	firmware_class->tokenize = fu_ihex_firmware_tokenize;
+	firmware_class->write = fu_ihex_firmware_write;
 }
 
 /**

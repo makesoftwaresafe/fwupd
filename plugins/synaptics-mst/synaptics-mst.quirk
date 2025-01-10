@@ -1,7 +1,3 @@
-# match all devices with this udev subsystem
-[DRM_DP_AUX_DEV]
-Plugin = synaptics_mst
-
 # GUID generation for Synaptics MST plugin
 #
 # SYNAPTICSMST\BID is the 16 bit board ID which contains:
@@ -16,8 +12,22 @@ Plugin = synaptics_mst
 #  * These GUIDs will look like MST-${DEVICEKIND}-${CHIPID}-${BOARDID}
 #
 # By default the Synaptics MST device will restart after update
-# To override this behavior add FWUPD_DEVICE_FLAG_SKIPS_RESTART
+# To override this behavior add FU_DEVICE_PRIVATE_FLAG_SKIPS_RESTART
 #
+
+[DPAUX\OUI_0090CC24]
+Plugin = synaptics_mst
+
+[MST-162]
+Name = Luxshare Quad USB4 Dock
+SynapticsMstDeviceKind = dock
+Flags = manual-restart-required
+
+[MST-163]
+Name = Luxshare 7-in-1 Travel Dock Video Hub
+SynapticsMstDeviceKind = dock
+Flags = install-parent-first
+ParentGuid = USB\VID_208E&PID_0822
 
 [MST-272]
 Name = Dell X6 Platform
@@ -51,4 +61,8 @@ SynapticsMstDeviceKind = dock
 
 [MST-596]
 Name = ThinkPad USB-C Dock Gen2
+SynapticsMstDeviceKind = dock
+
+[MST-602]
+Name = ThinkPad Universal ThunderBolt 4 Dock
 SynapticsMstDeviceKind = dock

@@ -1,5 +1,5 @@
-if gusb.found()
 cargs = ['-DG_LOG_DOMAIN="FuPluginCorsair"']
+plugins += {meson.current_source_dir().split('/')[-1]: true}
 
 plugin_quirks += join_paths(meson.current_source_dir(), 'corsair.quirk')
 plugin_builtins += static_library('fu_plugin_corsair',
@@ -15,4 +15,9 @@ plugin_builtins += static_library('fu_plugin_corsair',
   c_args: cargs,
   dependencies: plugin_deps,
 )
-endif
+
+device_tests += files(
+  'tests/corsair-katar-pro-xt.json',
+  'tests/corsair-sabre-pro.json',
+  'tests/corsair-sabre-rgb-pro.json',
+)

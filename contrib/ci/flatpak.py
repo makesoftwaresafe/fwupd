@@ -1,4 +1,9 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
+#
+# Copyright 2018 Mario Limonciello <mario.limonciello@dell.com>
+#
+# SPDX-License-Identifier: LGPL-2.1-or-later
+
 import subprocess
 import os
 import json
@@ -18,20 +23,20 @@ def prepare(target):
     if os.path.isdir("build"):
         shutil.rmtree("build")
     data = {}
-    with open("contrib/flatpak/org.freedesktop.fwupd.json", "r") as rfd:
+    with open("contrib/flatpak/org.freedesktop.fwupd.json") as rfd:
         data = json.load(rfd, strict=False)
-    platform = "runtime/%s/x86_64/%s" % (data["runtime"], data["runtime-version"])
-    sdk = "runtime/%s/x86_64/%s" % (data["sdk"], data["runtime-version"])
+    platform = f"runtime/{data['runtime']}/x86_64/{data['runtime-version']}"
+    sdk = f"runtime/{data['sdk']}/x86_64/{data['runtime-version']}"
     num_modules = len(data["modules"])
 
     # update to build from main
     data["branch"] = "main"
     for index in range(0, num_modules):
         module = data["modules"][index]
-        if type(module) != dict or not "name" in module:
+        if type(module) != dict or "name" not in module:
             continue
         name = module["name"]
-        if not "fwupd" in name:
+        if "fwupd" not in name:
             continue
         data["modules"][index]["sources"][0].pop("url")
         data["modules"][index]["sources"][0].pop("sha256")

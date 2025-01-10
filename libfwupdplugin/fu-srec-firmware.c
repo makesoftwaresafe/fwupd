@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2019 Richard Hughes <richard@hughsie.com>
+ * Copyright 2019 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #define G_LOG_DOMAIN "FuFirmware"
@@ -11,6 +11,7 @@
 #include <string.h>
 
 #include "fu-byte-array.h"
+#include "fu-chunk-array.h"
 #include "fu-common.h"
 #include "fu-firmware-common.h"
 #include "fu-srec-firmware.h"
@@ -26,6 +27,8 @@
 
 typedef struct {
 	GPtrArray *records;
+	guint32 addr_min;
+	guint32 addr_max;
 } FuSrecFirmwarePrivate;
 
 G_DEFINE_TYPE_WITH_PRIVATE(FuSrecFirmware, fu_srec_firmware, FU_TYPE_FIRMWARE)
@@ -52,6 +55,40 @@ fu_srec_firmware_get_records(FuSrecFirmware *self)
 	FuSrecFirmwarePrivate *priv = GET_PRIVATE(self);
 	g_return_val_if_fail(FU_IS_SREC_FIRMWARE(self), NULL);
 	return priv->records;
+}
+
+/**
+ * fu_srec_firmware_set_addr_min:
+ * @self: A #FuSrecFirmware
+ * @addr_min: address, or 0x0 to disable
+ *
+ * Sets the minimum address allowed. This may be useful to ignore a bootloader section.
+ *
+ * Since: 1.9.3
+ **/
+void
+fu_srec_firmware_set_addr_min(FuSrecFirmware *self, guint32 addr_min)
+{
+	FuSrecFirmwarePrivate *priv = GET_PRIVATE(self);
+	g_return_if_fail(FU_IS_SREC_FIRMWARE(self));
+	priv->addr_min = addr_min;
+}
+
+/**
+ * fu_srec_firmware_set_addr_max:
+ * @self: A #FuSrecFirmware
+ * @addr_max: address, or 0x0 to disable
+ *
+ * Sets the maximum address allowed. This may be useful to ignore a signature.
+ *
+ * Since: 1.9.3
+ **/
+void
+fu_srec_firmware_set_addr_max(FuSrecFirmware *self, guint32 addr_max)
+{
+	FuSrecFirmwarePrivate *priv = GET_PRIVATE(self);
+	g_return_if_fail(FU_IS_SREC_FIRMWARE(self));
+	priv->addr_max = addr_max;
 }
 
 static void
@@ -143,8 +180,8 @@ fu_srec_firmware_tokenize_cb(GString *token, guint token_idx, gpointer user_data
 	/* sanity check */
 	if (token_idx > FU_SREC_FIRMWARE_TOKENS_MAX) {
 		g_set_error_literal(error,
-				    G_IO_ERROR,
-				    G_IO_ERROR_INVALID_DATA,
+				    FWUPD_ERROR,
+				    FWUPD_ERROR_INVALID_DATA,
 				    "file has too many lines");
 		return FALSE;
 	}
@@ -334,18 +371,16 @@ fu_srec_firmware_tokenize_cb(GString *token, guint token_idx, gpointer user_data
 }
 
 static gboolean
-fu_srec_firmware_tokenize(FuFirmware *firmware, GBytes *fw, FwupdInstallFlags flags, GError **error)
+fu_srec_firmware_tokenize(FuFirmware *firmware,
+			  GInputStream *stream,
+			  FwupdInstallFlags flags,
+			  GError **error)
 {
 	FuSrecFirmware *self = FU_SREC_FIRMWARE(firmware);
 	FuSrecFirmwareTokenHelper helper = {.self = self, .flags = flags, .got_eof = FALSE};
 
 	/* parse records */
-	if (!fu_strsplit_full(g_bytes_get_data(fw, NULL),
-			      g_bytes_get_size(fw),
-			      "\n",
-			      fu_srec_firmware_tokenize_cb,
-			      &helper,
-			      error))
+	if (!fu_strsplit_stream(stream, 0x0, "\n", fu_srec_firmware_tokenize_cb, &helper, error))
 		return FALSE;
 
 	/* no EOF */
@@ -361,8 +396,7 @@ fu_srec_firmware_tokenize(FuFirmware *firmware, GBytes *fw, FwupdInstallFlags fl
 
 static gboolean
 fu_srec_firmware_parse(FuFirmware *firmware,
-		       GBytes *fw,
-		       gsize offset,
+		       GInputStream *stream,
 		       FwupdInstallFlags flags,
 		       GError **error)
 {
@@ -447,11 +481,17 @@ fu_srec_firmware_parse(FuFirmware *firmware,
 					    rcd->ln);
 				return FALSE;
 			}
-			if (rcd->addr < offset) {
+			if (rcd->addr < priv->addr_min) {
 				g_debug(
 				    "ignoring data at 0x%x as before start address 0x%x at line %u",
 				    (guint)rcd->addr,
-				    (guint)offset,
+				    priv->addr_min,
+				    rcd->ln);
+			} else if (priv->addr_max > 0 && rcd->addr < priv->addr_max) {
+				g_debug(
+				    "ignoring data at 0x%x as after end address 0x%x at line %u",
+				    (guint)rcd->addr,
+				    priv->addr_max,
 				    rcd->ln);
 			} else {
 				guint32 len_hole = rcd->addr - addr32_last;
@@ -545,9 +585,10 @@ fu_srec_firmware_write_line(GString *str,
 	g_string_append_printf(str, "%02X\n", csum);
 }
 
-static GBytes *
+static GByteArray *
 fu_srec_firmware_write(FuFirmware *firmware, GError **error)
 {
+	g_autoptr(GByteArray) buf = g_byte_array_new();
 	g_autoptr(GString) str = g_string_new(NULL);
 	g_autoptr(GBytes) buf_blob = NULL;
 	const gchar *id = fu_firmware_get_id(firmware);
@@ -579,13 +620,18 @@ fu_srec_firmware_write(FuFirmware *firmware, GError **error)
 
 	/* payload */
 	if (g_bytes_get_size(buf_blob) > 0) {
-		g_autoptr(GPtrArray) chunks = NULL;
-		chunks = fu_chunk_array_new_from_bytes(buf_blob,
-						       fu_firmware_get_addr(firmware),
-						       0x0,
-						       64);
-		for (guint i = 0; i < chunks->len; i++) {
-			FuChunk *chk = g_ptr_array_index(chunks, i);
+		g_autoptr(FuChunkArray) chunks =
+		    fu_chunk_array_new_from_bytes(buf_blob,
+						  fu_firmware_get_addr(firmware),
+						  FU_CHUNK_PAGESZ_NONE,
+						  64);
+		for (guint i = 0; i < fu_chunk_array_length(chunks); i++) {
+			g_autoptr(FuChunk) chk = NULL;
+
+			/* prepare chunk */
+			chk = fu_chunk_array_index(chunks, i, error);
+			if (chk == NULL)
+				return NULL;
 			fu_srec_firmware_write_line(str,
 						    kind_data,
 						    fu_chunk_get_address(chk),
@@ -593,16 +639,17 @@ fu_srec_firmware_write(FuFirmware *firmware, GError **error)
 						    fu_chunk_get_data_sz(chk));
 		}
 		/* upgrade to longer format */
-		if (chunks->len > G_MAXUINT16)
+		if (fu_chunk_array_length(chunks) > G_MAXUINT16)
 			kind_coun = FU_FIRMWARE_SREC_RECORD_KIND_S6_COUNT_24;
-		fu_srec_firmware_write_line(str, kind_coun, chunks->len, NULL, 0);
+		fu_srec_firmware_write_line(str, kind_coun, fu_chunk_array_length(chunks), NULL, 0);
 	}
 
 	/* EOF */
 	fu_srec_firmware_write_line(str, kind_term, 0x0, NULL, 0);
 
 	/* success */
-	return g_string_free_to_bytes(g_steal_pointer(&str));
+	g_byte_array_append(buf, (const guint8 *)str->str, str->len);
+	return g_steal_pointer(&buf);
 }
 
 static void
@@ -626,11 +673,11 @@ static void
 fu_srec_firmware_class_init(FuSrecFirmwareClass *klass)
 {
 	GObjectClass *object_class = G_OBJECT_CLASS(klass);
-	FuFirmwareClass *klass_firmware = FU_FIRMWARE_CLASS(klass);
+	FuFirmwareClass *firmware_class = FU_FIRMWARE_CLASS(klass);
 	object_class->finalize = fu_srec_firmware_finalize;
-	klass_firmware->parse = fu_srec_firmware_parse;
-	klass_firmware->tokenize = fu_srec_firmware_tokenize;
-	klass_firmware->write = fu_srec_firmware_write;
+	firmware_class->parse = fu_srec_firmware_parse;
+	firmware_class->tokenize = fu_srec_firmware_tokenize;
+	firmware_class->write = fu_srec_firmware_write;
 }
 
 /**

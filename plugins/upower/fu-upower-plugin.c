@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2016 Richard Hughes <richard@hughsie.com>
+ * Copyright 2016 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #include "config.h"
@@ -43,6 +43,17 @@ fu_upower_plugin_rescan_devices(FuPlugin *plugin)
 		fu_context_set_battery_level(ctx, FWUPD_BATTERY_LEVEL_INVALID);
 		return;
 	}
+
+	/* get percentage */
+	percentage_val = g_dbus_proxy_get_cached_property(self->proxy, "Percentage");
+	if (percentage_val == NULL) {
+		g_warning("failed to query power percentage level");
+		fu_context_set_battery_level(ctx, FWUPD_BATTERY_LEVEL_INVALID);
+		return;
+	}
+	fu_context_set_battery_level(ctx, g_variant_get_double(percentage_val));
+
+	/* get state */
 	state_val = g_dbus_proxy_get_cached_property(self->proxy, "State");
 	if (state_val == NULL || g_variant_get_uint32(state_val) == 0) {
 		g_warning("failed to query power state");
@@ -71,15 +82,6 @@ fu_upower_plugin_rescan_devices(FuPlugin *plugin)
 		fu_context_set_power_state(ctx, FU_POWER_STATE_UNKNOWN);
 		break;
 	}
-
-	/* get percentage */
-	percentage_val = g_dbus_proxy_get_cached_property(self->proxy, "Percentage");
-	if (percentage_val == NULL) {
-		g_warning("failed to query power percentage level");
-		fu_context_set_battery_level(ctx, FWUPD_BATTERY_LEVEL_INVALID);
-		return;
-	}
-	fu_context_set_battery_level(ctx, g_variant_get_double(percentage_val));
 }
 
 static void
@@ -180,7 +182,7 @@ fu_upower_plugin_init(FuUpowerPlugin *self)
 }
 
 static void
-fu_upower_finalize(GObject *obj)
+fu_upower_plugin_finalize(GObject *obj)
 {
 	FuUpowerPlugin *self = FU_UPOWER_PLUGIN(obj);
 	if (self->proxy != NULL)
@@ -196,6 +198,6 @@ fu_upower_plugin_class_init(FuUpowerPluginClass *klass)
 	FuPluginClass *plugin_class = FU_PLUGIN_CLASS(klass);
 	GObjectClass *object_class = G_OBJECT_CLASS(klass);
 
-	object_class->finalize = fu_upower_finalize;
+	object_class->finalize = fu_upower_plugin_finalize;
 	plugin_class->startup = fu_upower_plugin_startup;
 }

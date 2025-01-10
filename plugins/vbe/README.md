@@ -11,7 +11,7 @@ platform to be updated from user space.
 
 Firmware updates are held within a CAB file, a Windows format which allows
 files to be collected and compressed, similar to a tar file. The CAB file can be
-created using the `gcab` tool, as shown in the VBE `example` directory.
+created using the `fwupdtool` tool, as shown in the VBE `example` directory.
 
 Inside the CAB file is the firmware itself, in Flat Image Tree (FIT) format.
 This is typically called `firmware.fit` and can be created by the `mkimage` tool,
@@ -269,3 +269,10 @@ the update.
 ## Version Considerations
 
 This plugin has been available since fwupd version `1.8.2`.
+
+## Owners
+
+Anyone can submit a pull request to modify this plugin, but the following people should be
+consulted before making major or functional changes:
+
+* Simon Glass: @sjg20

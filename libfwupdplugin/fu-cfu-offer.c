@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2021 Richard Hughes <richard@hughsie.com>
+ * Copyright 2021 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #define G_LOG_DOMAIN "FuFirmware"
@@ -9,10 +9,11 @@
 #include "config.h"
 
 #include "fu-byte-array.h"
+#include "fu-cfu-firmware-struct.h"
 #include "fu-cfu-offer.h"
-#include "fu-cfu-struct.h"
 #include "fu-common.h"
 #include "fu-string.h"
+#include "fu-version-common.h"
 
 /**
  * FuCfuOffer:
@@ -417,22 +418,19 @@ fu_cfu_offer_set_product_id(FuCfuOffer *self, guint16 product_id)
 
 static gboolean
 fu_cfu_offer_parse(FuFirmware *firmware,
-		   GBytes *fw,
-		   gsize offset,
+		   GInputStream *stream,
 		   FwupdInstallFlags flags,
 		   GError **error)
 {
 	FuCfuOffer *self = FU_CFU_OFFER(firmware);
 	FuCfuOfferPrivate *priv = GET_PRIVATE(self);
-	gsize bufsz = 0;
 	guint8 flags1;
 	guint8 flags2;
 	guint8 flags3;
-	const guint8 *buf = g_bytes_get_data(fw, &bufsz);
 	g_autoptr(GByteArray) st = NULL;
 
 	/* parse */
-	st = fu_struct_cfu_offer_parse(buf, bufsz, offset, error);
+	st = fu_struct_cfu_offer_parse_stream(stream, 0x0, error);
 	if (st == NULL)
 		return FALSE;
 	priv->segment_number = fu_struct_cfu_offer_get_segment_number(st);
@@ -440,12 +438,14 @@ fu_cfu_offer_parse(FuFirmware *firmware,
 	priv->token = fu_struct_cfu_offer_get_token(st);
 	priv->hw_variant = fu_struct_cfu_offer_get_compat_variant_mask(st);
 	priv->product_id = fu_struct_cfu_offer_get_product_id(st);
+
+	/* AA.BBCC.DD */
 	fu_firmware_set_version_raw(firmware, fu_struct_cfu_offer_get_version(st));
 
 	/* component info */
 	flags1 = fu_struct_cfu_offer_get_flags1(st);
-	priv->force_ignore_version = (flags1 & 0b1) > 0;
-	priv->force_immediate_reset = (flags1 & 0b10) > 0;
+	priv->force_ignore_version = (flags1 & 0b10000000) > 0;
+	priv->force_immediate_reset = (flags1 & 0b01000000) > 0;
 
 	/* product info */
 	flags2 = fu_struct_cfu_offer_get_flags2(st);
@@ -458,7 +458,7 @@ fu_cfu_offer_parse(FuFirmware *firmware,
 	return TRUE;
 }
 
-static GBytes *
+static GByteArray *
 fu_cfu_offer_write(FuFirmware *firmware, GError **error)
 {
 	FuCfuOffer *self = FU_CFU_OFFER(firmware);
@@ -468,8 +468,8 @@ fu_cfu_offer_write(FuFirmware *firmware, GError **error)
 	/* component info */
 	fu_struct_cfu_offer_set_segment_number(st, priv->segment_number);
 	fu_struct_cfu_offer_set_flags1(st,
-				       priv->force_ignore_version |
-					   (priv->force_immediate_reset << 1));
+				       priv->force_ignore_version << 7 |
+					   (priv->force_immediate_reset << 6));
 	fu_struct_cfu_offer_set_component_id(st, priv->component_id);
 	fu_struct_cfu_offer_set_token(st, priv->token);
 
@@ -483,7 +483,7 @@ fu_cfu_offer_write(FuFirmware *firmware, GError **error)
 	fu_struct_cfu_offer_set_product_id(st, priv->product_id);
 
 	/* success */
-	return g_byte_array_free_to_bytes(g_steal_pointer(&st));
+	return g_steal_pointer(&st);
 }
 
 static gboolean
@@ -534,20 +534,29 @@ fu_cfu_offer_build(FuFirmware *firmware, XbNode *n, GError **error)
 	return TRUE;
 }
 
+static gchar *
+fu_cfu_offer_convert_version(FuFirmware *firmware, guint64 version_raw)
+{
+	return fu_version_from_uint32(version_raw, fu_firmware_get_version_format(firmware));
+}
+
 static void
 fu_cfu_offer_init(FuCfuOffer *self)
 {
 	fu_firmware_add_flag(FU_FIRMWARE(self), FU_FIRMWARE_FLAG_HAS_VID_PID);
+	fu_firmware_add_flag(FU_FIRMWARE(self), FU_FIRMWARE_FLAG_NO_AUTO_DETECTION);
+	fu_firmware_set_version_format(FU_FIRMWARE(self), FWUPD_VERSION_FORMAT_SURFACE);
 }
 
 static void
 fu_cfu_offer_class_init(FuCfuOfferClass *klass)
 {
-	FuFirmwareClass *klass_firmware = FU_FIRMWARE_CLASS(klass);
-	klass_firmware->export = fu_cfu_offer_export;
-	klass_firmware->parse = fu_cfu_offer_parse;
-	klass_firmware->write = fu_cfu_offer_write;
-	klass_firmware->build = fu_cfu_offer_build;
+	FuFirmwareClass *firmware_class = FU_FIRMWARE_CLASS(klass);
+	firmware_class->convert_version = fu_cfu_offer_convert_version;
+	firmware_class->export = fu_cfu_offer_export;
+	firmware_class->parse = fu_cfu_offer_parse;
+	firmware_class->write = fu_cfu_offer_write;
+	firmware_class->build = fu_cfu_offer_build;
 }
 
 /**

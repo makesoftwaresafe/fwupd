@@ -1,15 +1,14 @@
 /*
- * Copyright (C) 2018 Richard Hughes <richard@hughsie.com>
+ * Copyright 2018 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #include "config.h"
 
-#include <fwupdplugin.h>
-
 #include "fu-rts54hid-common.h"
 #include "fu-rts54hid-device.h"
+#include "fu-rts54hid-struct.h"
 
 struct _FuRts54HidDevice {
 	FuHidDevice parent_instance;
@@ -23,38 +22,24 @@ static void
 fu_rts54hid_device_to_string(FuDevice *device, guint idt, GString *str)
 {
 	FuRts54HidDevice *self = FU_RTS54HID_DEVICE(device);
-	fu_string_append_kb(str, idt, "FwAuth", self->fw_auth);
-	fu_string_append_kb(str, idt, "DualBank", self->dual_bank);
+	fwupd_codec_string_append_bool(str, idt, "FwAuth", self->fw_auth);
+	fwupd_codec_string_append_bool(str, idt, "DualBank", self->dual_bank);
 }
 
 static gboolean
 fu_rts54hid_device_set_clock_mode(FuRts54HidDevice *self, gboolean enable, GError **error)
 {
-	FuRts54HidCmdBuffer cmd_buffer = {
-	    .cmd = FU_RTS54HID_CMD_WRITE_DATA,
-	    .ext = FU_RTS54HID_EXT_MCUMODIFYCLOCK,
-	    .cmd_data0 = (guint8)enable,
-	    .cmd_data1 = 0,
-	    .cmd_data2 = 0,
-	    .cmd_data3 = 0,
-	    .bufferlen = 0,
-	    .parameters = 0,
-	};
-	guint8 buf[FU_RTS54FU_HID_REPORT_LENGTH] = {0};
+	g_autoptr(FuRts54HidCmdBuffer) st = fu_rts54_hid_cmd_buffer_new();
 
-	if (!fu_memcpy_safe(buf,
-			    sizeof(buf),
-			    0x0, /* dst */
-			    (const guint8 *)&cmd_buffer,
-			    sizeof(cmd_buffer),
-			    0x0, /* src */
-			    sizeof(cmd_buffer),
-			    error))
-		return FALSE;
+	fu_rts54_hid_cmd_buffer_set_cmd(st, FU_RTS54HID_CMD_WRITE_DATA);
+	fu_rts54_hid_cmd_buffer_set_ext(st, FU_RTS54HID_EXT_MCUMODIFYCLOCK);
+	fu_rts54_hid_cmd_buffer_set_dwregaddr(st, (guint8)enable);
+	fu_byte_array_set_size(st, FU_RTS54FU_HID_REPORT_LENGTH, 0x0);
+
 	if (!fu_hid_device_set_report(FU_HID_DEVICE(self),
 				      0x0,
-				      buf,
-				      sizeof(buf),
+				      st->data,
+				      st->len,
 				      FU_RTS54HID_DEVICE_TIMEOUT * 2,
 				      FU_HID_DEVICE_FLAG_NONE,
 				      error)) {
@@ -67,28 +52,16 @@ fu_rts54hid_device_set_clock_mode(FuRts54HidDevice *self, gboolean enable, GErro
 static gboolean
 fu_rts54hid_device_reset_to_flash(FuRts54HidDevice *self, GError **error)
 {
-	FuRts54HidCmdBuffer cmd_buffer = {
-	    .cmd = FU_RTS54HID_CMD_WRITE_DATA,
-	    .ext = FU_RTS54HID_EXT_RESET2FLASH,
-	    .dwregaddr = 0,
-	    .bufferlen = 0,
-	    .parameters = 0,
-	};
-	guint8 buf[FU_RTS54FU_HID_REPORT_LENGTH] = {0};
+	g_autoptr(FuRts54HidCmdBuffer) st = fu_rts54_hid_cmd_buffer_new();
 
-	if (!fu_memcpy_safe(buf,
-			    sizeof(buf),
-			    0x0, /* dst */
-			    (const guint8 *)&cmd_buffer,
-			    sizeof(cmd_buffer),
-			    0x0, /* src */
-			    sizeof(cmd_buffer),
-			    error))
-		return FALSE;
+	fu_rts54_hid_cmd_buffer_set_cmd(st, FU_RTS54HID_CMD_WRITE_DATA);
+	fu_rts54_hid_cmd_buffer_set_ext(st, FU_RTS54HID_EXT_RESET2FLASH);
+	fu_byte_array_set_size(st, FU_RTS54FU_HID_REPORT_LENGTH, 0x0);
+
 	if (!fu_hid_device_set_report(FU_HID_DEVICE(self),
 				      0x0,
-				      buf,
-				      sizeof(buf),
+				      st->data,
+				      st->len,
 				      FU_RTS54HID_DEVICE_TIMEOUT * 2,
 				      FU_HID_DEVICE_FLAG_NONE,
 				      error)) {
@@ -105,30 +78,20 @@ fu_rts54hid_device_write_flash(FuRts54HidDevice *self,
 			       guint16 data_sz,
 			       GError **error)
 {
-	FuRts54HidCmdBuffer cmd_buffer = {
-	    .cmd = FU_RTS54HID_CMD_WRITE_DATA,
-	    .ext = FU_RTS54HID_EXT_WRITEFLASH,
-	    .dwregaddr = GUINT32_TO_LE(addr),
-	    .bufferlen = GUINT16_TO_LE(data_sz),
-	    .parameters = 0,
-	};
-	guint8 buf[FU_RTS54FU_HID_REPORT_LENGTH] = {0};
+	g_autoptr(FuRts54HidCmdBuffer) st = fu_rts54_hid_cmd_buffer_new();
 
 	g_return_val_if_fail(data_sz <= 128, FALSE);
 	g_return_val_if_fail(data != NULL, FALSE);
 	g_return_val_if_fail(data_sz != 0, FALSE);
 
-	if (!fu_memcpy_safe(buf,
-			    sizeof(buf),
-			    0x0, /* dst */
-			    (const guint8 *)&cmd_buffer,
-			    sizeof(cmd_buffer),
-			    0x0, /* src */
-			    sizeof(cmd_buffer),
-			    error))
-		return FALSE;
-	if (!fu_memcpy_safe(buf,
-			    sizeof(buf),
+	fu_rts54_hid_cmd_buffer_set_cmd(st, FU_RTS54HID_CMD_WRITE_DATA);
+	fu_rts54_hid_cmd_buffer_set_ext(st, FU_RTS54HID_EXT_WRITEFLASH);
+	fu_rts54_hid_cmd_buffer_set_dwregaddr(st, addr);
+	fu_rts54_hid_cmd_buffer_set_bufferlen(st, data_sz);
+	fu_byte_array_set_size(st, FU_RTS54FU_HID_REPORT_LENGTH, 0x0);
+
+	if (!fu_memcpy_safe(st->data,
+			    st->len,
 			    FU_RTS54HID_CMD_BUFFER_OFFSET_DATA, /* dst */
 			    data,
 			    data_sz,
@@ -136,10 +99,11 @@ fu_rts54hid_device_write_flash(FuRts54HidDevice *self,
 			    data_sz,
 			    error))
 		return FALSE;
+
 	if (!fu_hid_device_set_report(FU_HID_DEVICE(self),
 				      0x0,
-				      buf,
-				      sizeof(buf),
+				      st->data,
+				      st->len,
 				      FU_RTS54HID_DEVICE_TIMEOUT * 2,
 				      FU_HID_DEVICE_FLAG_NONE,
 				      error)) {
@@ -152,32 +116,19 @@ fu_rts54hid_device_write_flash(FuRts54HidDevice *self,
 static gboolean
 fu_rts54hid_device_verify_update_fw(FuRts54HidDevice *self, FuProgress *progress, GError **error)
 {
-	const FuRts54HidCmdBuffer cmd_buffer = {
-	    .cmd = FU_RTS54HID_CMD_WRITE_DATA,
-	    .ext = FU_RTS54HID_EXT_VERIFYUPDATE,
-	    .cmd_data0 = 1,
-	    .cmd_data1 = 0,
-	    .cmd_data2 = 0,
-	    .cmd_data3 = 0,
-	    .bufferlen = GUINT16_TO_LE(1),
-	    .parameters = 0,
-	};
-	guint8 buf[FU_RTS54FU_HID_REPORT_LENGTH] = {0};
+	g_autoptr(FuRts54HidCmdBuffer) st = fu_rts54_hid_cmd_buffer_new();
+
+	fu_rts54_hid_cmd_buffer_set_cmd(st, FU_RTS54HID_CMD_WRITE_DATA);
+	fu_rts54_hid_cmd_buffer_set_ext(st, FU_RTS54HID_EXT_VERIFYUPDATE);
+	fu_rts54_hid_cmd_buffer_set_dwregaddr(st, 1);
+	fu_rts54_hid_cmd_buffer_set_bufferlen(st, 1);
+	fu_byte_array_set_size(st, FU_RTS54FU_HID_REPORT_LENGTH, 0x0);
 
 	/* set then get */
-	if (!fu_memcpy_safe(buf,
-			    sizeof(buf),
-			    0x0, /* dst */
-			    (const guint8 *)&cmd_buffer,
-			    sizeof(cmd_buffer),
-			    0x0, /* src */
-			    sizeof(cmd_buffer),
-			    error))
-		return FALSE;
 	if (!fu_hid_device_set_report(FU_HID_DEVICE(self),
 				      0x0,
-				      buf,
-				      sizeof(buf),
+				      st->data,
+				      st->len,
 				      FU_RTS54HID_DEVICE_TIMEOUT * 2,
 				      FU_HID_DEVICE_FLAG_NONE,
 				      error))
@@ -185,15 +136,15 @@ fu_rts54hid_device_verify_update_fw(FuRts54HidDevice *self, FuProgress *progress
 	fu_device_sleep_full(FU_DEVICE(self), 4000, progress); /* ms */
 	if (!fu_hid_device_get_report(FU_HID_DEVICE(self),
 				      0x0,
-				      buf,
-				      sizeof(buf),
+				      st->data,
+				      st->len,
 				      FU_RTS54HID_DEVICE_TIMEOUT,
 				      FU_HID_DEVICE_FLAG_NONE,
 				      error))
 		return FALSE;
 
 	/* check device status */
-	if (buf[0] != 0x01) {
+	if (st->data[0] != 0x01) {
 		g_set_error_literal(error, FWUPD_ERROR, FWUPD_ERROR_WRITE, "firmware flash failed");
 		return FALSE;
 	}
@@ -205,31 +156,17 @@ fu_rts54hid_device_verify_update_fw(FuRts54HidDevice *self, FuProgress *progress
 static gboolean
 fu_rts54hid_device_erase_spare_bank(FuRts54HidDevice *self, GError **error)
 {
-	FuRts54HidCmdBuffer cmd_buffer = {
-	    .cmd = FU_RTS54HID_CMD_WRITE_DATA,
-	    .ext = FU_RTS54HID_EXT_ERASEBANK,
-	    .cmd_data0 = 0,
-	    .cmd_data1 = 1,
-	    .cmd_data2 = 0,
-	    .cmd_data3 = 0,
-	    .bufferlen = 0,
-	    .parameters = 0,
-	};
-	guint8 buf[FU_RTS54FU_HID_REPORT_LENGTH] = {0};
+	g_autoptr(FuRts54HidCmdBuffer) st = fu_rts54_hid_cmd_buffer_new();
 
-	if (!fu_memcpy_safe(buf,
-			    sizeof(buf),
-			    0x0, /* dst */
-			    (const guint8 *)&cmd_buffer,
-			    sizeof(cmd_buffer),
-			    0x0, /* src */
-			    sizeof(cmd_buffer),
-			    error))
-		return FALSE;
+	fu_rts54_hid_cmd_buffer_set_cmd(st, FU_RTS54HID_CMD_WRITE_DATA);
+	fu_rts54_hid_cmd_buffer_set_ext(st, FU_RTS54HID_EXT_ERASEBANK);
+	fu_rts54_hid_cmd_buffer_set_dwregaddr(st, 0x100);
+	fu_byte_array_set_size(st, FU_RTS54FU_HID_REPORT_LENGTH, 0x0);
+
 	if (!fu_hid_device_set_report(FU_HID_DEVICE(self),
 				      0x0,
-				      buf,
-				      sizeof(buf),
+				      st->data,
+				      st->len,
 				      FU_RTS54HID_DEVICE_TIMEOUT * 2,
 				      FU_HID_DEVICE_FLAG_NONE,
 				      error)) {
@@ -242,52 +179,38 @@ fu_rts54hid_device_erase_spare_bank(FuRts54HidDevice *self, GError **error)
 static gboolean
 fu_rts54hid_device_ensure_status(FuRts54HidDevice *self, GError **error)
 {
-	const FuRts54HidCmdBuffer cmd_buffer = {
-	    .cmd = FU_RTS54HID_CMD_READ_DATA,
-	    .ext = FU_RTS54HID_EXT_READ_STATUS,
-	    .cmd_data0 = 0,
-	    .cmd_data1 = 0,
-	    .cmd_data2 = 0,
-	    .cmd_data3 = 0,
-	    .bufferlen = GUINT16_TO_LE(32),
-	    .parameters = 0,
-	};
-	guint8 buf[FU_RTS54FU_HID_REPORT_LENGTH] = {0};
 	g_autofree gchar *version = NULL;
+	g_autoptr(FuRts54HidCmdBuffer) st = fu_rts54_hid_cmd_buffer_new();
+
+	fu_rts54_hid_cmd_buffer_set_cmd(st, FU_RTS54HID_CMD_READ_DATA);
+	fu_rts54_hid_cmd_buffer_set_ext(st, FU_RTS54HID_EXT_READ_STATUS);
+	fu_rts54_hid_cmd_buffer_set_bufferlen(st, 32);
+	fu_byte_array_set_size(st, FU_RTS54FU_HID_REPORT_LENGTH, 0x0);
 
 	/* set then get */
-	if (!fu_memcpy_safe(buf,
-			    sizeof(buf),
-			    0x0, /* dst */
-			    (const guint8 *)&cmd_buffer,
-			    sizeof(cmd_buffer),
-			    0x0, /* src */
-			    sizeof(cmd_buffer),
-			    error))
-		return FALSE;
 	if (!fu_hid_device_set_report(FU_HID_DEVICE(self),
 				      0x0,
-				      buf,
-				      sizeof(buf),
+				      st->data,
+				      st->len,
 				      FU_RTS54HID_DEVICE_TIMEOUT * 2,
 				      FU_HID_DEVICE_FLAG_NONE,
 				      error))
 		return FALSE;
 	if (!fu_hid_device_get_report(FU_HID_DEVICE(self),
 				      0x0,
-				      buf,
-				      sizeof(buf),
+				      st->data,
+				      st->len,
 				      FU_RTS54HID_DEVICE_TIMEOUT,
 				      FU_HID_DEVICE_FLAG_NONE,
 				      error))
 		return FALSE;
 
 	/* check the hardware capabilities */
-	self->dual_bank = (buf[7] & 0xf0) == 0x80;
-	self->fw_auth = (buf[13] & 0x02) > 0;
+	self->dual_bank = (st->data[7] & 0xf0) == 0x80;
+	self->fw_auth = (st->data[13] & 0x02) > 0;
 
 	/* hub version is more accurate than bcdVersion */
-	version = g_strdup_printf("%x.%x", buf[10], buf[11]);
+	version = g_strdup_printf("%x.%x", st->data[10], st->data[11]);
 	fu_device_set_version(FU_DEVICE(self), version);
 	return TRUE;
 }
@@ -339,8 +262,8 @@ fu_rts54hid_device_write_firmware(FuDevice *device,
 				  GError **error)
 {
 	FuRts54HidDevice *self = FU_RTS54HID_DEVICE(device);
-	g_autoptr(GBytes) fw = NULL;
-	g_autoptr(GPtrArray) chunks = NULL;
+	g_autoptr(GInputStream) stream = NULL;
+	g_autoptr(FuChunkArray) chunks = NULL;
 
 	/* progress */
 	fu_progress_set_id(progress, G_STRLOC);
@@ -350,8 +273,8 @@ fu_rts54hid_device_write_firmware(FuDevice *device,
 	fu_progress_add_step(progress, FWUPD_STATUS_DEVICE_BUSY, 1, "reset");
 
 	/* get default image */
-	fw = fu_firmware_get_bytes(firmware, error);
-	if (fw == NULL)
+	stream = fu_firmware_get_stream(firmware, error);
+	if (stream == NULL)
 		return FALSE;
 
 	/* set MCU to high clock rate for better ISP performance */
@@ -364,12 +287,21 @@ fu_rts54hid_device_write_firmware(FuDevice *device,
 	fu_progress_step_done(progress);
 
 	/* write each block */
-	chunks = fu_chunk_array_new_from_bytes(fw,
-					       0x00, /* start addr */
-					       0x00, /* page_sz */
-					       FU_RTS54HID_TRANSFER_BLOCK_SIZE);
-	for (guint i = 0; i < chunks->len; i++) {
-		FuChunk *chk = g_ptr_array_index(chunks, i);
+	chunks = fu_chunk_array_new_from_stream(stream,
+						FU_CHUNK_ADDR_OFFSET_NONE,
+						FU_CHUNK_PAGESZ_NONE,
+						FU_RTS54HID_TRANSFER_BLOCK_SIZE,
+						error);
+	if (chunks == NULL)
+		return FALSE;
+	for (guint i = 0; i < fu_chunk_array_length(chunks); i++) {
+		g_autoptr(FuChunk) chk = NULL;
+
+		/* prepare chunk */
+		chk = fu_chunk_array_index(chunks, i, error);
+		if (chk == NULL)
+			return FALSE;
+
 		/* write chunk */
 		if (!fu_rts54hid_device_write_flash(self,
 						    fu_chunk_get_address(chk),
@@ -381,7 +313,7 @@ fu_rts54hid_device_write_firmware(FuDevice *device,
 		/* update progress */
 		fu_progress_set_percentage_full(fu_progress_get_child(progress),
 						(gsize)i + 1,
-						(gsize)chunks->len);
+						(gsize)fu_chunk_array_length(chunks));
 	}
 	fu_progress_step_done(progress);
 
@@ -421,10 +353,10 @@ fu_rts54hid_device_init(FuRts54HidDevice *self)
 static void
 fu_rts54hid_device_class_init(FuRts54HidDeviceClass *klass)
 {
-	FuDeviceClass *klass_device = FU_DEVICE_CLASS(klass);
-	klass_device->write_firmware = fu_rts54hid_device_write_firmware;
-	klass_device->to_string = fu_rts54hid_device_to_string;
-	klass_device->setup = fu_rts54hid_device_setup;
-	klass_device->close = fu_rts54hid_device_close;
-	klass_device->set_progress = fu_rts54hid_device_set_progress;
+	FuDeviceClass *device_class = FU_DEVICE_CLASS(klass);
+	device_class->write_firmware = fu_rts54hid_device_write_firmware;
+	device_class->to_string = fu_rts54hid_device_to_string;
+	device_class->setup = fu_rts54hid_device_setup;
+	device_class->close = fu_rts54hid_device_close;
+	device_class->set_progress = fu_rts54hid_device_set_progress;
 }

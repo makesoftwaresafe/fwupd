@@ -19,6 +19,7 @@ _fwupdmgr_cmd_list=(
 	'get-details'
 	'get-devices'
 	'get-history'
+	'get-plugins'
 	'get-releases'
 	'get-remotes'
 	'get-results'
@@ -35,12 +36,16 @@ _fwupdmgr_cmd_list=(
 	'quit'
 	'reinstall'
 	'refresh'
+	'report-devices'
 	'report-history'
+	'report-export'
 	'security'
+	'security-fix'
+	'security-undo'
 	'set-approved-firmware'
 	'set-bios-setting'
 	'switch-branch'
-	'sync-bkc'
+	'sync'
 	'unlock'
 	'unblock-firmware'
 	'update'
@@ -52,7 +57,6 @@ _fwupdmgr_cmd_list=(
 
 _fwupdmgr_opts=(
 	'--verbose'
-	'--offline'
 	'--allow-reinstall'
 	'--allow-older'
 	'--allow-branch-switch'
@@ -64,12 +68,15 @@ _fwupdmgr_opts=(
 	'--no-reboot-check'
 	'--no-safety-check'
 	'--no-remote-check'
+	'--no-security-fix'
 	'--show-all'
 	'--sign'
 	'--filter'
+	'--filter-release'
 	'--disable-ssl-strict'
-	'--ipfs'
+	'--p2p'
 	'--json'
+	'--download-retries'
 )
 
 bios_get_opts=(
@@ -82,6 +89,89 @@ bios_set_opts=(
 	'--no-reboot-check'
 	'--json'
 	'--verbose'
+)
+
+fwupd_modify_config_sections=(
+	'fwupd'
+	'msr'
+	'redfish'
+	'test'
+	'thunderbolt'
+	'uefi_capsule'
+	'dell_kestrel'
+)
+
+fwupd_modify_config_opts=(
+	'ArchiveSizeMax'
+	'ApprovedFirmware'
+	'BlockedFirmware'
+	'DisabledDevices'
+	'DisabledPlugins'
+	'EspLocation'
+	'EnumerateAllDevices'
+	'HostBkc'
+	'IdleTimeout'
+	'IgnorePower'
+	'OnlyTrusted'
+	'P2pPolicy'
+	'ReleaseDedupe'
+	'ReleasePriority'
+	'ShowDevicePrivate'
+	'TestDevices'
+	'TrustedReports'
+	'TrustedUids'
+	'UpdateMotd'
+	'UriSchemes'
+	'VerboseDomains'
+)
+
+test_modify_config_opts=(
+	'AnotherWriteRequired'
+	'CompositeChild'
+	'DecompressDelay'
+	'NeedsActivation'
+	'NeedsReboot'
+	'RegistrationSupported'
+	'RequestDelay'
+	'RequestSupported'
+	'VerifyDelay'
+	'WriteDelay'
+	'WriteSupported'
+)
+
+redfish_modify_config_opts=(
+	'CACheck'
+	'IpmiDisableCreateUser'
+	'ManagerResetTimeout'
+	'Password'
+	'Uri'
+	'Username'
+	'UserUri'
+)
+
+uefi_capsule_modify_config_opts=(
+	'DisableCapsuleUpdateOnDisk'
+	'DisableShimForSecureBoot'
+	'EnableEfiDebugging'
+	'EnableGrubChainLoad'
+	'OverrideESPMountPoint'
+	'RebootCleanup'
+	'RequireESPFreeSpace'
+	'ScreenWidth'
+	'ScreenHeight'
+)
+
+dell_kestrel_modify_config_opts=(
+	'UpdateOnDisconnect'
+)
+
+reset_config_opts=(
+	'fwupd'
+	'msr'
+	'redfish'
+	'test'
+	'thunderbolt'
+	'uefi_capsule'
 )
 
 _show_file_in_dir()
@@ -143,6 +233,16 @@ _show_device_ids()
 	COMPREPLY+=( $(compgen -W "${description}" -- "$cur") )
 }
 
+_show_plugins()
+{
+	if ! command -v jq &> /dev/null; then
+		return 0
+	fi
+	local plugins
+	plugins="$(command fwupdmgr get-plugins --json 2>/dev/null | jq '.Plugins | .[] | .Name')"
+	COMPREPLY+=( $(compgen -W "${plugins}" -- "$cur") )
+}
+
 _show_release_versions()
 {
 	if ! command -v jq &> /dev/null; then
@@ -153,10 +253,45 @@ _show_release_versions()
 	COMPREPLY+=( $(compgen -W "${description}" -- "$cur") )
 }
 
+_show_fwupd_modify_sections()
+{
+	COMPREPLY+=( $(compgen -W '${fwupd_modify_config_sections[@]}' -- "$cur") )
+}
+
+_show_fwupd_modify_config()
+{
+	COMPREPLY+=( $(compgen -W '${fwupd_modify_config_opts[@]}' -- "$cur") )
+}
+
+_show_test_modify_config()
+{
+	COMPREPLY+=( $(compgen -W '${test_modify_config_opts[@]}' -- "$cur") )
+}
+
+_show_redfish_modify_config()
+{
+	COMPREPLY+=( $(compgen -W '${redfish_modify_config_opts[@]}' -- "$cur") )
+}
+
+_show_uefi_capsule_modify_config()
+{
+	COMPREPLY+=( $(compgen -W '${uefi_capsule_modify_config_opts[@]}' -- "$cur") )
+}
+
+_show_dell_kestrel_modify_config()
+{
+	COMPREPLY+=( $(compgen -W '${dell_kestrel_modify_config_opts[@]}' -- "$cur") )
+}
+
+_show_reset_config()
+{
+	COMPREPLY+=( $(compgen -W '${reset_config_opts[@]}' -- "$cur") )
+}
+
 _show_remotes()
 {
 	local remotes
-	remotes="$(command fwupdmgr get-remotes | command awk '/Remote ID/ { print $4 }')"
+	remotes="$(command fwupdmgr get-remotes --json 2>/dev/null | jq '.Remotes | .[] | .Id')"
 	COMPREPLY+=( $(compgen -W "${remotes}" -- "$cur") )
 }
 
@@ -176,7 +311,7 @@ _fwupdmgr()
 	esac
 
 	case $arg in
-	activate|clear-results|downgrade|get-releases|get-results|unlock|verify|verify-update|get-updates|switch-branch|update|upgrade)
+	activate|clear-results|downgrade|get-releases|get-results|unlock|verify|verify-update|get-updates|switch-branch|update|upgrade|report-export)
 		#device ID
 		if [[ "$args" = "2" ]]; then
 			_show_device_ids
@@ -204,6 +339,9 @@ _fwupdmgr()
 			return 0
 		fi
 		_show_bios_set_modifiers
+		return 0
+		;;
+	get-plugins)
 		return 0
 		;;
 	get-details)
@@ -258,6 +396,79 @@ _fwupdmgr()
 		#find remotes
 		if [[ "$args" = "2" ]]; then
 			_show_remotes
+		fi
+		;;
+	modify-config)
+		if [[ "$args" = "2" ]]; then
+			_show_fwupd_modify_sections
+			return 0
+		elif [[ "$args" = "3" ]]; then
+			case $prev in
+			test)
+				_show_test_modify_config
+				;;
+			msr)
+				COMPREPLY+=( $(compgen -W 'DelayedActivation MinimumSmeKernelVersion' -- "$cur") )
+				;;
+			thunderbolt)
+				COMPREPLY+=( $(compgen -W 'DelayedActivation MinimumKernelVersion' -- "$cur") )
+				;;
+			fwupd)
+				_show_fwupd_modify_config
+				;;
+			redfish)
+				_show_redfish_modify_config
+				;;
+			uefi_capsule)
+				_show_uefi_capsule_modify_config
+				;;
+			dell_kestrel)
+				_show_dell_kestrel_modify_config
+				;;
+			esac
+			return 0
+		elif [[ "$args" = "4" ]]; then
+			case $prev in
+			EnumerateAllDevices|OnlyTrusted|IgnorePower|UpdateMotd|ShowDevicePrivate|ReleaseDedupe|TestDevices)
+				COMPREPLY=( $(compgen -W "True False" -- "$cur") )
+				;;
+			AnotherWriteRequired|NeedsActivation|NeedsReboot|RegistrationSupported|RequestSupported|WriteSupported)
+				COMPREPLY=( $(compgen -W "True False" -- "$cur") )
+				;;
+			ReleasePriority)
+				COMPREPLY=( $(compgen -W "local remote" -- "$cur") )
+				;;
+			UriSchemes)
+				COMPREPLY=( $(compgen -W "file https http ipfs file;https;http;ipfs file;https;http https;http" -- "$cur") )
+				;;
+			P2pPolicy)
+				COMPREPLY=( $(compgen -W "none metadata firmware metadata,firmware" -- "$cur") )
+				;;
+			IdleTimeout|ArchiveSizeMax|HostBkc|TrustedUids)
+				;;
+			ApprovedFirmware|BlockedFirmware)
+				;;
+			DisabledDevices)
+				_show_device_ids
+				;;
+			DisabledPlugins)
+				_show_plugins
+				;;
+			EspLocation)
+				;;
+			TrustedReports)
+				;;
+			VerboseDomains)
+				;;
+			esac
+			return 0
+		fi
+		;;
+	reset-config)
+		#find files
+		if [[ "$args" = "2" ]]; then
+			_show_reset_config
+			return 0
 		fi
 		;;
 	refresh)

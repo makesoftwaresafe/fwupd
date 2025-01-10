@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2018 Richard Hughes <richard@hughsie.com>
+ * Copyright 2018 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #pragma once
@@ -15,15 +15,16 @@ struct _FuWacModuleClass {
 	FuDeviceClass parent_class;
 };
 
-#define FU_WAC_MODULE_WRITE_TIMEOUT  2000  /* ms */
-#define FU_WAC_MODULE_ERASE_TIMEOUT  15000 /* ms */
-#define FU_WAC_MODULE_FINISH_TIMEOUT 1000  /* ms */
-#define FU_WAC_MODULE_COMMIT_TIMEOUT 80000 /* ms */
+#define FU_WAC_MODULE_POLL_INTERVAL 100	  /* ms */
+#define FU_WAC_MODULE_START_TIMEOUT 15000 /* ms */
+#define FU_WAC_MODULE_DATA_TIMEOUT  10000 /* ms */
+#define FU_WAC_MODULE_END_TIMEOUT   10000 /* ms */
 
 gboolean
 fu_wac_module_set_feature(FuWacModule *self,
 			  guint8 command,
 			  GBytes *blob,
 			  FuProgress *progress,
+			  guint poll_interval,
 			  guint busy_timeout,
 			  GError **error);

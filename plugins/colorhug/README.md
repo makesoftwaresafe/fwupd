@@ -24,9 +24,7 @@ This plugin supports the following protocol ID:
 
 These devices use the standard USB DeviceInstanceId values, e.g.
 
-* `USB\VID_273F&PID_1001&REV_0001`
 * `USB\VID_273F&PID_1001`
-* `USB\VID_273F`
 
 ## Update Behavior
 
@@ -36,6 +34,12 @@ back to the runtime mode.
 
 For this reason the `REPLUG_MATCH_GUID` internal device flag is used so that
 the bootloader and runtime modes are treated as the same device.
+
+### `Flags=halfsize`
+
+Some devices have a compact memory layout and the application code starts earlier.
+
+Since: 1.0.3
 
 ## Vendor ID Security
 
@@ -48,3 +52,10 @@ This plugin requires read/write access to `/dev/bus/usb`.
 ## Version Considerations
 
 This plugin has been available since fwupd version `0.8.0`.
+
+## Owners
+
+Anyone can submit a pull request to modify this plugin, but the following people should be
+consulted before making major or functional changes:
+
+* Richard Hughes: @hughsie

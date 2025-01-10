@@ -1,9 +1,9 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 # pylint: disable=invalid-name,missing-docstring
 #
-# Copyright (C) 2021 Richard Hughes <richard@hughsie.com>
+# Copyright 2021 Richard Hughes <richard@hughsie.com>
 #
-# SPDX-License-Identifier: LGPL-2.1+
+# SPDX-License-Identifier: LGPL-2.1-or-later
 
 import json
 
@@ -29,7 +29,6 @@ def _failure(msg: str, status=400):
 
 @app.route("/redfish/v1/")
 def index():
-
     # reset counter
     app._percentage545 = 0
     app._percentage546 = 0
@@ -37,7 +36,7 @@ def index():
     # check password from the config file
     try:
         if (
-            not request.authorization["username"] in HARDCODED_USERNAMES
+            request.authorization["username"] not in HARDCODED_USERNAMES
             or request.authorization["password"] != HARDCODED_PASSWORD
         ):
             return _failure("unauthorised", status=401)
@@ -46,6 +45,7 @@ def index():
 
     res = {
         "@odata.id": "/redfish/v1/",
+        "@odata.etag": "653b835e9ee4af9ea7ea",
         "RedfishVersion": "1.6.0",
         "UUID": "92384634-2938-2342-8820-489239905423",
         "UpdateService": {"@odata.id": "/redfish/v1/UpdateService"},
@@ -55,10 +55,10 @@ def index():
 
 @app.route("/redfish/v1/UpdateService")
 def update_service():
-
     res = {
         "@odata.id": "/redfish/v1/UpdateService",
         "@odata.type": "#UpdateService.v1_8_0.UpdateService",
+        "@odata.etag": "653b835e9ee4af9ea7ea",
         "FirmwareInventory": {
             "@odata.id": "/redfish/v1/UpdateService/FirmwareInventory"
         },
@@ -94,10 +94,10 @@ def update_service():
 
 @app.route("/redfish/v1/UpdateService/FirmwareInventory")
 def firmware_inventory():
-
     res = {
         "@odata.id": "/redfish/v1/UpdateService/FirmwareInventory",
         "@odata.type": "#SoftwareInventoryCollection.SoftwareInventoryCollection",
+        "@odata.etag": "653b835e9ee4af9ea7ea",
         "Members": [
             {"@odata.id": "/redfish/v1/UpdateService/FirmwareInventory/BMC"},
             {"@odata.id": "/redfish/v1/UpdateService/FirmwareInventory/BIOS"},
@@ -109,10 +109,10 @@ def firmware_inventory():
 
 @app.route("/redfish/v1/UpdateService/FirmwareInventory/BMC")
 def firmware_inventory_bmc():
-
     res = {
         "@odata.id": "/redfish/v1/UpdateService/FirmwareInventory/BMC",
         "@odata.type": "#SoftwareInventory.v1_2_3.SoftwareInventory",
+        "@odata.etag": "653b835e9ee4af9ea7ea",
         "Id": "BMC",
         "LowestSupportedVersion": "11A-0.12",
         "Name": "Lenovo BMC Firmware",
@@ -135,14 +135,12 @@ def firmware_inventory_bmc():
 
 @app.route("/redfish/v1/Managers/BMC")
 def redfish_managers_bmc():
-
     res = {}
     return Response(json.dumps(res), status=200, mimetype="application/json")
 
 
 @app.route("/redfish/v1/Chassis/1/PCIeDevices/slot_3/PCIeFunctions/slot_2.00")
 def firmware_chassis_pcie_function_slot2():
-
     res = {
         "VendorId": "0x14e4",
         "FunctionId": 1,
@@ -158,7 +156,6 @@ def firmware_chassis_pcie_function_slot2():
 
 @app.route("/redfish/v1/Chassis/1/PCIeDevices/slot_3/PCIeFunctions")
 def firmware_chassis_pcie_functions():
-
     res = {
         "Members": [
             {
@@ -171,10 +168,10 @@ def firmware_chassis_pcie_functions():
 
 @app.route("/redfish/v1/Systems/437XR1138R2")
 def firmware_systems_slot7():
-
     res = {
         "SerialNumber": "12345",
         "@odata.id": "/redfish/v1/Chassis/1/PCIeDevices/slot_3",
+        "@odata.etag": "653b835e9ee4af9ea7ea",
         "PCIeFunctions": {
             "@odata.id": "/redfish/v1/Chassis/1/PCIeDevices/slot_3/PCIeFunctions"
         },
@@ -185,15 +182,14 @@ def firmware_systems_slot7():
 
 @app.route("/redfish/v1/UpdateService/FirmwareInventory/BIOS")
 def firmware_inventory_bios():
-
     res = {
         "@odata.id": "/redfish/v1/UpdateService/FirmwareInventory/BIOS",
         "@odata.type": "#SoftwareInventory.v1_2_3.SoftwareInventory",
+        "@odata.etag": "653b835e9ee4af9ea7ea",
         "Id": "BIOS",
         "LowestSupportedVersion": "P79 v1.10",
         "Name": "Contoso BIOS Firmware",
         "RelatedItem": [{"@odata.id": "/redfish/v1/Systems/437XR1138R2"}],
-        "ReleaseDate": "2017-12-06T12:00:00",
         "SoftwareId": "FEE82A67-6CE2-4625-9F44-237AD2402C28",
         "Updateable": True,
         "Version": "P79 v1.45",
@@ -214,6 +210,7 @@ def task_manager():
     res = {
         "@odata.id": "/redfish/v1/TaskService/999",
         "@odata.type": "#Task.v1_4_3.Task",
+        "@odata.etag": "653b835e9ee4af9ea7ea",
         "Id": "545",
         "Name": "Task 545",
     }
@@ -222,10 +219,10 @@ def task_manager():
 
 @app.route("/redfish/v1/TaskService/Tasks/545")
 def task_status_545():
-
     res = {
         "@odata.id": "/redfish/v1/TaskService/Tasks/545",
         "@odata.type": "#Task.v1_4_3.Task",
+        "@odata.etag": "653b835e9ee4af9ea7ea",
         "Id": "545",
         "Name": "Task 545",
         "PercentComplete": app._percentage545,
@@ -274,10 +271,10 @@ def task_status_545():
 
 @app.route("/redfish/v1/TaskService/Tasks/546")
 def task_status_546():
-
     res = {
         "@odata.type": "#Task.v1_4_3.Task",
         "@odata.id": "/redfish/v1/TaskService/Tasks/546",
+        "@odata.etag": "653b835e9ee4af9ea7ea",
         "Id": "546",
         "Name": "BIOS Verify",
         "TaskState": "Running",
@@ -309,7 +306,6 @@ def task_status_546():
 
 @app.route("/FWUpdate-unlicensed", methods=["GET"])
 def fwupdate_unlicensed():
-
     res = {
         "error": {
             "code": "Base.v1_4_0.GeneralError",
@@ -340,6 +336,7 @@ def fwupdate_unlicensed():
     res = {
         "Version": "P79 v1.45",
         "@odata.id": "/redfish/v1/TaskService/Tasks/545",
+        "@odata.etag": "653b835e9ee4af9ea7ea",
         "TaskMonitor": "/redfish/v1/TaskService/999",
     }
     # Location set to the URI of a task monitor.
@@ -353,7 +350,6 @@ def fwupdate_unlicensed():
 
 @app.route("/FWUpdate-smc", methods=["POST"])
 def fwupdate_smc():
-
     data = json.loads(request.form["UpdateParameters"])
     if data["@Redfish.OperationApplyTime"] != "OnStartUpdateRequest":
         return _failure("apply invalid")
@@ -414,7 +410,6 @@ def fwupdate_smc():
 
 @app.route("/FWUpdate", methods=["POST"])
 def fwupdate():
-
     data = json.loads(request.form["UpdateParameters"])
     if data["@Redfish.OperationApplyTime"] != "Immediate":
         return _failure("apply invalid")
@@ -428,6 +423,7 @@ def fwupdate():
     res = {
         "Version": "P79 v1.45",
         "@odata.id": "/redfish/v1/TaskService/Tasks/545",
+        "@odata.etag": "653b835e9ee4af9ea7ea",
         "TaskMonitor": "/redfish/v1/TaskService/999",
     }
     # Location set to the URI of a task monitor.

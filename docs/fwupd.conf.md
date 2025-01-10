@@ -1,27 +1,26 @@
 ---
-title: Configuration File Format
+title: fwupd.conf file format
 ---
 
 % fwupd.conf(5) {{PACKAGE_VERSION}} | Configuration File Format
 
-NAME
-----
+## NAME
 
 **fwupd.conf** — configuration file for the fwupd daemon.
 
-SYNOPSIS
---------
+## SYNOPSIS
 
 The `{{SYSCONFDIR}}/fwupd/fwupd.conf` file is the main configuration file for the fwupd daemon.
 The complete description of the file format and possible parameters are documented here for reference purposes.
 
-FILE FORMAT
------------
+## FILE FORMAT
 
 The file consists of a multiple sections with optional parameters. Parameters are of the form:
 
-  [section]
-  key = value
+```text
+[section]
+key = value
+```
 
 The file is line-based, each newline-terminated line represents either a comment, a section name or
 a parameter.
@@ -39,16 +38,15 @@ The values following the equals sign in parameters are all either a string (no q
 unsigned integers, or a boolean, which may be given as **true** or **false**.
 Case is not significant in boolean values, but is preserved in string values.
 
-DAEMON PARAMETERS
------------------
+## DAEMON PARAMETERS
 
-The `[daemon]` section can contain the following parameters:
+The `[fwupd]` section can contain the following parameters:
 
-**DisabledDevices=**
+**DisabledDevices={{DisabledDevices}}**
 
   Allow blocking specific devices by their GUID, using semicolons as delimiter.
 
-**DisabledPlugins={{FU_DAEMON_CONFIG_DEFAULT_DISABLED_PLUGINS}}**
+**DisabledPlugins={{DisabledPlugins}}**
 
   Allow blocking specific plugins by name.
   Use **fwupdmgr get-plugins** to get the list of plugins.
@@ -57,70 +55,77 @@ The `[daemon]` section can contain the following parameters:
 
   Maximum archive size that can be loaded in Mb, with 25% of the total system memory as the default.
 
-**IdleTimeout=**
+**IdleTimeout={{IdleTimeout}}**
 
   Idle time in seconds to shut down the daemon, where a value of **0** specifies "never".
 
   **NOTE:** some plugins might inhibit the auto-shutdown, for instance thunderbolt.
 
-**VerboseDomains=**
+**IdleInhibitStartupThreshold={{IdleInhibitStartupThreshold}}**
+
+  If the daemon takes more than this time to startup (in milliseconds) then inhibit the idle
+  shutdown timer. A value of **0** specifies "never".
+
+**VerboseDomains={{VerboseDomains}}**
 
   Comma separated list of domains to log in verbose mode.
   If unset, no domains are set to verbose.
   If set to "*", all domains are verbose, which is the same as running the daemon with **--verbose --verbose**.
 
-**UpdateMotd={{FU_DAEMON_CONFIG_DEFAULT_UPDATE_MOTD}}**
+**UpdateMotd={{UpdateMotd}}**
 
   Update the message of the day (MOTD) on device and metadata changes.
 
-**EnumerateAllDevices={{FU_DAEMON_CONFIG_DEFAULT_ENUMERATE_ALL_DEVICES}}**
+**EnumerateAllDevices={{EnumerateAllDevices}}**
 
   For some plugins, enumerate only devices supported by metadata.
 
-**ApprovedFirmware=**
+**ApprovedFirmware={{ApprovedFirmware}}**
 
   A list of firmware checksums that has been approved by the site admin
   If unset, all firmware is approved.
 
-**BlockedFirmware=**
+**BlockedFirmware={{BlockedFirmware}}**
 
   Allow blocking specific devices by their cabinet checksum, either SHA-1 or SHA-256.
 
-**UriSchemes={{FU_DAEMON_CONFIG_DEFAULT_URI_SCHEMES}}**
+**UriSchemes={{UriSchemes}}**
 
   Allowed URI schemes in the preference order; failed downloads from the first scheme will be retried with the next in order until no choices remain.
 
-**IgnorePower={{FU_DAEMON_CONFIG_DEFAULT_IGNORE_POWER}}**
+**IgnorePower={{IgnorePower}}**
 
   Ignore power levels of devices when running updates.
 
-**OnlyTrusted={{FU_DAEMON_CONFIG_DEFAULT_ONLY_TRUSTED}}**
+**IgnoreRequirements={{IgnoreRequirements}}**
+
+  Ignore some device requirements, for instance removing the generic GUID requirement of a CHID,
+  child, parent or sibling.
+  This is not recommended for production systems, although it may be useful for firmware development.
+
+**OnlyTrusted={{OnlyTrusted}}**
 
   Only support installing firmware signed with a trusted key.
   Do not set this to `false` on a production or trusted system.
 
-**ShowDevicePrivate={{FU_DAEMON_CONFIG_DEFAULT_SHOW_DEVICE_PRIVATE}}**
+**ShowDevicePrivate={{ShowDevicePrivate}}**
 
   Show data such as device serial numbers which some users may consider private.
 
-**AllowEmulation={{FU_DAEMON_CONFIG_DEFAULT_ALLOW_EMULATION}}**
-
-  Allow capturing and loading device emulation by logging all USB transfers.
-  Enabling this will greatly increase the amount of memory fwupd uses when upgrading devices.
-
-**TrustedUids={{FU_DAEMON_CONFIG_DEFAULT_TRUSTED_UIDS}}**
+**TrustedUids={{TrustedUids}}**
 
   UIDs matching these values that call the D-Bus interface should marked as trusted.
 
-**HostBkc={{FU_DAEMON_CONFIG_DEFAULT_HOST_BKC}}**
+**HostBkc={{HostBkc}}**
 
-  A host best known configuration is used when using `fwupdmgr sync` which can downgrade firmware to factory versions or upgrade firmware to a supported config level. e.g. **vendor-factory-2021q1**
+  Comma separated list of best known configuration IDs to be used when using `fwupdmgr sync`.
+  This can downgrade firmware to factory versions or upgrade firmware to a supported config level. e.g. **vendor-factory-2021q1,mycompany-2023**
 
-**ReleaseDedupe={{FU_DAEMON_CONFIG_DEFAULT_RELEASE_DEDUPE}}**
+**ReleaseDedupe={{ReleaseDedupe}}**
 
   Deduplicate duplicate releases by the archive checksum are available from more than one source.
 
-**ReleasePriority={{FU_DAEMON_CONFIG_DEFAULT_RELEASE_PRIORITY}}**
+**ReleasePriority={{ReleasePriority}}**
 
   When the same version release is available from more than one source this option can be used to
   either prefer the local version (avoiding a potentially expensive download) or to prefer the
@@ -131,8 +136,8 @@ The `[daemon]` section can contain the following parameters:
 
 **EspLocation=**
 
-  Override the location used for the EFI system partition (ESP) path.
-  This is typically used if UDisks is not available, or was not able to automatically identify the location for any reason.
+  Set the preferred location used for the EFI system partition (ESP) path.
+  This is typically used if UDisks was not able to automatically identify the location for any reason.
 
 **Manufacturer=**
 
@@ -152,17 +157,30 @@ The `[daemon]` section can contain the following parameters:
   These are only required when the SMBIOS or Device Tree data is invalid, missing, or to simulate running on another system.
   Empty values should be used to populate blank entries or add values to populate specific entries.
 
-**TrustedReports={{FU_DAEMON_CONFIG_DEFAULT_TRUSTED_REPORTS}}**
+**TrustedReports={{TrustedReports}}**
 
-  Vendor reports matching these expressions will have releases marked as `trusted-report`, e.g.
+  Vendor reports matching these expressions will have releases marked as `trusted-report`.
+  Each *OR* section is delimited by a `;` and each *AND* section delimited by `&`, e.g.
 
 * `DistroId=chromeos`
 
+  Any report uploaded from ChromeOS is trusted.
+
+* `DistroId=chromeos&RemoteId=lvfs`
+
+  Any report found in the `lvfs` remote uploaded from a ChromeOS machine is trusted.
+
 * `DistroId=fedora&VendorId=19`
+
+  Any report uploaded from Fedora 19 is trusted.
 
 * `DistroId=fedora&VendorId=$OEM`
 
+  Any report uploaded from Fedora by the hardware OEM is trusted.
+
 * `DistroId=fedora;DistroId=rhel&DistroVersion=9`
+
+  Any report uploaded from Fedora (any version) or from RHEL 9 is trusted.
 
   NOTE: a `VendorId` of `$OEM` represents the OEM vendor ID of the vendor that owns the firmware,
   for example, where Lenovo QA has generated a signed report for a Lenovo laptop.
@@ -174,30 +192,55 @@ The `[daemon]` section can contain the following parameters:
 
 * `DistroId=$ID,DistroVersion=$VERSION_ID`
 
+* `Flags=is-upgrade,from-oem`
+
+  Any flags listed here must all be matched by the report.
+
+**P2pPolicy={{P2pPolicy}}**
+
+  This tells the daemon what peer-to-peer policy to use. For instance, using Passim, an optional
+  local caching service. Using peer-to-peer data might reduce the amount of bandwidth used on your
+  network considerably.
+
+  There are three possible values:
+
+* `nothing`: Do not publish any files
+
+* `metadata`: Only publish shared metadata that is common to each machine.
+
+* `firmware`: Only publish firmware archives **after the next reboot** of the machine.
+
+  At some point in the future fwupd will change the default to `metadata,firmware`.
+
+**TestDevices={{TestDevices}}**
+
+  Create virtual test devices and remote for validating daemon flows.
+  This is only intended for CI testing and development purposes.
+
 {% if plugin_uefi_capsule %}
-UEFI_CAPSULE PARAMETERS
------------------------
+
+## UEFI_CAPSULE PARAMETERS
 
 The `[uefi_capsule]` section can contain the following parameters:
 
-**EnableGrubChainLoad={{FU_UEFI_CAPSULE_CONFIG_DEFAULT_ENABLE_GRUB_CHAIN_LOAD}}**
+**EnableGrubChainLoad={{uefi_capsule_EnableGrubChainLoad}}**
 
   Configure GRUB to launch `fwupdx64.efi` instead of using other methods such as NVRAM or Capsule-On-Disk.
 
-**DisableShimForSecureBoot={{FU_UEFI_CAPSULE_CONFIG_DEFAULT_DISABLE_SHIM_FOR_SECURE_BOOT}}**
+**DisableShimForSecureBoot={{uefi_capsule_DisableShimForSecureBoot}}**
 
   The shim loader is required to chainload the fwupd EFI binary unless the `fwupd.efi` file has been self-signed manually.
 
-**RequireESPFreeSpace={{FU_UEFI_CAPSULE_CONFIG_DEFAULT_REQUIRE_ESP_FREE_SPACE}}**
+**RequireESPFreeSpace={{uefi_capsule_RequireESPFreeSpace}}**
 
   Amount of free space required on the ESP, for example using `32` for 32Mb.
   By default this is dynamically set to at least twice the size of the payload.
 
-**DisableCapsuleUpdateOnDisk={{FU_UEFI_CAPSULE_CONFIG_DEFAULT_DISABLE_CAPSULE_UPDATE_ON_DISK}}**
+**DisableCapsuleUpdateOnDisk={{uefi_capsule_DisableCapsuleUpdateOnDisk}}**
 
   Allow ignoring the CapsuleOnDisk support advertised by the firmware.
 
-**EnableEfiDebugging={{FU_UEFI_CAPSULE_CONFIG_DEFAULT_ENABLE_EFI_DEBUGGING}}**
+**EnableEfiDebugging={{uefi_capsule_EnableEfiDebugging}}**
 
   Enable the low-level debugging of `fwupdx64.efi` to the `FWUPDATE_DEBUG_LOG` EFI variable.
 
@@ -206,15 +249,31 @@ The `[uefi_capsule]` section can contain the following parameters:
 
   This value also has no affect when using Capsule-on-Disk as the EFI helper binary is
   not being used.
+
+**RebootCleanup={{uefi_capsule_RebootCleanup}}**
+
+  Delete any capsule files copy to the ESP, and remove any EFI variables set for the update.
+
+  **NOTE:** disabling this option is only required when debugging the flash process and normal
+  users should not need to change this setting.
+
+**ScreenWidth={{uefi_capsule_ScreenWidth}}**
+
+  Override the screen width in pixels of the EFI framebuffer as used by the UX capsule.
+
+**ScreenHeight={{uefi_capsule_ScreenHeight}}**
+
+  Override the screen height in pixels of the EFI framebuffer as used by the UX capsule.
+
 {% endif %}
 
 {% if plugin_msr %}
-MSR PARAMETERS
---------------
+
+## MSR PARAMETERS
 
 The `[msr]` section can contain the following parameter:
 
-**MinimumSmeKernelVersion={{FU_MSR_CONFIG_DEFAULT_MINIMUM_SME_KERNEL_VERSION}}**
+**MinimumSmeKernelVersion={{msr_MinimumSmeKernelVersion}}**
 
   Minimum kernel version to allow probing for sme flag.
 
@@ -223,61 +282,115 @@ The `[msr]` section can contain the following parameter:
 {% endif %}
 
 {% if plugin_redfish %}
-REDFISH PARAMETERS
-------------------
+
+## REDFISH PARAMETERS
 
 The `[redfish]` section can contain the following parameters:
 
-**Uri=**
+**Uri={{redfish_Uri}}**
 
   The URI to the Redfish service in the format `scheme://ip:port` for instance `https://192.168.0.133:443`
 
-**Username=**
+**Username={{redfish_Username}}**
 
   The username to use when connecting to the Redfish service.
 
-**Password=**
+**Password={{redfish_Password}}**
 
   The password to use when connecting to the Redfish service.
 
-**CACheck={{FU_REDFISH_CONFIG_DEFAULT_CA_CHECK}}**
+**CACheck={{redfish_CACheck}}**
 
   Whether to verify the server certificate or not. This is turned off by default.
   BMCs using self-signed certificates will not work unless the plugin does not verify it against the system CAs.
 
-**IpmiDisableCreateUser={{FU_REDFISH_CONFIG_DEFAULT_IPMI_DISABLE_CREATE_USER}}**
+**IpmiDisableCreateUser={{redfish_IpmiDisableCreateUser}}**
 
   Do not use IPMI KCS to create an initial user account if no SMBIOS data.
   Setting this to **true** prevents creating user accounts on the BMC automatically.
 
-**ManagerResetTimeout={{FU_REDFISH_CONFIG_DEFAULT_MANAGER_RESET_TIMEOUT}}**
+**ManagerResetTimeout={{redfish_ManagerResetTimeout}}**
 
   Amount of time in seconds to wait for a BMC restart.
 {% endif %}
 
-THUNDERBOLT PARAMETERS
-----------------------
+## THUNDERBOLT PARAMETERS
 
 The `[thunderbolt]` section can contain the following parameters:
 
-**MinimumKernelVersion={{FU_THUNDERBOLT_CONFIG_DEFAULT_MINIMUM_KERNEL_VERSION}}**
+**MinimumKernelVersion={{thunderbolt_MinimumKernelVersion}}**
 
   Minimum kernel version to allow use of this plugin.
 
   This only needs to be modified by enterprise kernels that have cherry picked the feature into a
   kernel with an old version number.
 
-**DelayedActivation={{FU_THUNDERBOLT_CONFIG_DEFAULT_DELAYED_ACTIVATION}}**
+**DelayedActivation={{thunderbolt_DelayedActivation}}**
 
   Forces delaying activation until shutdown/logout/reboot.
 
-NOTES
------
+## DELL_KESTREL PARAMETERS
+
+The `[dell_kestrel]` section can contain the following parameters:
+
+**UpdateOnDisconnect={{dell_kestrel_UpdateOnDisconnect}}**
+
+  Delaying firmware activation until the dock cable is unplugged.
+
+## TEST PARAMETERS
+
+The `[test]` section can contain the following parameters:
+
+**AnotherWriteRequired={{test_AnotherWriteRequired}}**
+
+  Do two passes of the write function.
+
+**CompositeChild={{test_CompositeChild}}**
+
+  If the device should have a child device.
+
+**DecompressDelay={{test_DecompressDelay}}**
+
+  Delay in milliseconds to use when decompressing the test device.
+
+**NeedsActivation={{test_NeedsActivation}}**
+
+  If the device needs activating before deploying the update.
+
+**NeedsReboot={{test_NeedsReboot}}**
+
+  If the device needs a reboot before deploying the update.
+
+**RegistrationSupported={{RegistrationSupported}}**
+
+  If the device should register with other plugins.
+
+**RequestDelay={{test_RequestDelay}}**
+
+  Delay in milliseconds to use when requesting user input from the user.
+
+**RequestSupported={{test_RequestSupported}}**
+
+  If the device interactive request is supported.
+
+**VerifyDelay={{test_DecompressDelay}}**
+
+  Delay in milliseconds to use when verifying the test device.
+
+**WriteDelay={{test_DecompressDelay}}**
+
+  Delay in milliseconds to use when writing the test device.
+
+**WriteSupported={{test_Supported}}**
+
+  If the device write is supported. If unsupported the device write will not start.
+
+## NOTES
 
 `{{SYSCONFDIR}}/fwupd/fwupd.conf` may contain either hardcoded or autogenerated credentials and must only be
 readable by the user that is running the fwupd process, which is typically `root`.
 
-SEE ALSO
---------
+## SEE ALSO
 
-`fwupdmgr(1)`
+<fwupdmgr(1)>
+<fwupd-remotes.d(5)>

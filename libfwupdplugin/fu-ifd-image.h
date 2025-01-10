@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2021 Richard Hughes <richard@hughsie.com>
+ * Copyright 2021 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #pragma once
@@ -19,6 +19,7 @@ struct _FuIfdImageClass {
 FuFirmware *
 fu_ifd_image_new(void);
 void
-fu_ifd_image_set_access(FuIfdImage *self, FuIfdRegion region, FuIfdAccess access);
+fu_ifd_image_set_access(FuIfdImage *self, FuIfdRegion region, FuIfdAccess access)
+    G_GNUC_NON_NULL(1);
 FuIfdAccess
-fu_ifd_image_get_access(FuIfdImage *self, FuIfdRegion region);
+fu_ifd_image_get_access(FuIfdImage *self, FuIfdRegion region) G_GNUC_NON_NULL(1);

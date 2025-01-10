@@ -1,5 +1,5 @@
 hsi_test_jsons = files([
-  'org.fwupd.hsi.Amd.PlatformRollbackProtection.json',
+  'org.fwupd.hsi.Amd.RollbackProtection.json',
   'org.fwupd.hsi.Amd.SpiReplayProtection.json',
   'org.fwupd.hsi.Amd.SpiWriteProtection.json',
   'org.fwupd.hsi.EncryptedRam.json',
@@ -8,9 +8,10 @@ hsi_test_jsons = files([
   'org.fwupd.hsi.IntelBootguard.Otp.json',
   'org.fwupd.hsi.IntelBootguard.Policy.json',
   'org.fwupd.hsi.IntelBootguard.Verified.json',
-  'org.fwupd.hsi.IntelCet.Active.json',
-  'org.fwupd.hsi.IntelCet.Enabled.json',
-  'org.fwupd.hsi.IntelSmap.json',
+  'org.fwupd.hsi.IntelGds.json',
+  'org.fwupd.hsi.Cet.Enabled.json',
+  'org.fwupd.hsi.Cet.Active.json',
+  'org.fwupd.hsi.Smap.json',
   'org.fwupd.hsi.Iommu.json',
   'org.fwupd.hsi.Kernel.Lockdown.json',
   'org.fwupd.hsi.Kernel.Tainted.json',
@@ -32,8 +33,10 @@ hsi_test_jsons = files([
   'org.fwupd.hsi.Tpm.EmptyPcr.json',
   'org.fwupd.hsi.Tpm.ReconstructionPcr0.json',
   'org.fwupd.hsi.Tpm.Version20.json',
+  'org.fwupd.hsi.Uefi.BootserviceVars.json',
   'org.fwupd.hsi.Uefi.Pk.json',
   'org.fwupd.hsi.Uefi.SecureBoot.json',
   'org.fwupd.hsi.Bios.RollbackProtection.json',
+  'org.fwupd.hsi.Amd.SmmLocked.json',
 ])
 

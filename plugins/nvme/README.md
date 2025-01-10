@@ -24,9 +24,7 @@ This plugin supports the following protocol ID:
 
 These device use the NVMe DeviceInstanceId values, e.g.
 
-* `NVME\VEN_1179&DEV_010F&REV_01`
 * `NVME\VEN_1179&DEV_010F`
-* `NVME\VEN_1179`
 
 The FRU globally unique identifier (FGUID) is also added from the CNS if set.
 Please refer to this document for more details on how to add support for
@@ -58,10 +56,17 @@ The block size used for NVMe writes
 
 Since: 1.1.3
 
-### Flags
+### `Flags=force-align`
 
-* `force-align` if image should be padded, since 1.2.4
-* `commit-ca3` download and activate immediately, since 1.8.15
+Force alignment of the firmware file.
+
+Since 1.2.4
+
+### `Flags=commit-ca3`
+
+Replace, and activate immediately rather than on next reset.
+
+Since 1.8.15
 
 ## Vendor ID Security
 

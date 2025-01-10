@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2017 Richard Hughes <richard@hughsie.com>
+ * Copyright 2017 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #define G_LOG_DOMAIN "FuCommon"
@@ -11,6 +11,7 @@
 #include "fwupd-error.h"
 
 #include "fu-mem-private.h"
+#include "fu-string.h"
 
 /**
  * fu_memwrite_uint16:
@@ -28,16 +29,16 @@ fu_memwrite_uint16(guint8 *buf, guint16 val_native, FuEndianType endian)
 	guint16 val_hw;
 	switch (endian) {
 	case G_BIG_ENDIAN:
-		val_hw = GUINT16_TO_BE(val_native);
+		val_hw = GUINT16_TO_BE(val_native); /* nocheck:blocked */
 		break;
 	case G_LITTLE_ENDIAN:
-		val_hw = GUINT16_TO_LE(val_native);
+		val_hw = GUINT16_TO_LE(val_native); /* nocheck:blocked */
 		break;
 	default:
 		val_hw = val_native;
 		break;
 	}
-	memcpy(buf, &val_hw, sizeof(val_hw));
+	memcpy(buf, &val_hw, sizeof(val_hw)); /* nocheck:blocked */
 }
 
 /**
@@ -56,12 +57,12 @@ fu_memwrite_uint24(guint8 *buf, guint32 val_native, FuEndianType endian)
 	guint32 val_hw;
 	switch (endian) {
 	case G_BIG_ENDIAN:
-		val_hw = GUINT32_TO_BE(val_native);
-		memcpy(buf, ((const guint8 *)&val_hw) + 0x1, 0x3);
+		val_hw = GUINT32_TO_BE(val_native);		   /* nocheck:blocked */
+		memcpy(buf, ((const guint8 *)&val_hw) + 0x1, 0x3); /* nocheck:blocked */
 		break;
 	case G_LITTLE_ENDIAN:
-		val_hw = GUINT32_TO_LE(val_native);
-		memcpy(buf, &val_hw, 0x3);
+		val_hw = GUINT32_TO_LE(val_native); /* nocheck:blocked */
+		memcpy(buf, &val_hw, 0x3); /* nocheck:blocked */
 		break;
 	default:
 		g_assert_not_reached();
@@ -84,16 +85,16 @@ fu_memwrite_uint32(guint8 *buf, guint32 val_native, FuEndianType endian)
 	guint32 val_hw;
 	switch (endian) {
 	case G_BIG_ENDIAN:
-		val_hw = GUINT32_TO_BE(val_native);
+		val_hw = GUINT32_TO_BE(val_native); /* nocheck:blocked */
 		break;
 	case G_LITTLE_ENDIAN:
-		val_hw = GUINT32_TO_LE(val_native);
+		val_hw = GUINT32_TO_LE(val_native); /* nocheck:blocked */
 		break;
 	default:
 		val_hw = val_native;
 		break;
 	}
-	memcpy(buf, &val_hw, sizeof(val_hw));
+	memcpy(buf, &val_hw, sizeof(val_hw)); /* nocheck:blocked */
 }
 
 /**
@@ -112,16 +113,16 @@ fu_memwrite_uint64(guint8 *buf, guint64 val_native, FuEndianType endian)
 	guint64 val_hw;
 	switch (endian) {
 	case G_BIG_ENDIAN:
-		val_hw = GUINT64_TO_BE(val_native);
+		val_hw = GUINT64_TO_BE(val_native); /* nocheck:blocked */
 		break;
 	case G_LITTLE_ENDIAN:
-		val_hw = GUINT64_TO_LE(val_native);
+		val_hw = GUINT64_TO_LE(val_native); /* nocheck:blocked */
 		break;
 	default:
 		val_hw = val_native;
 		break;
 	}
-	memcpy(buf, &val_hw, sizeof(val_hw));
+	memcpy(buf, &val_hw, sizeof(val_hw)); /* nocheck:blocked */
 }
 
 /**
@@ -139,13 +140,13 @@ guint16
 fu_memread_uint16(const guint8 *buf, FuEndianType endian)
 {
 	guint16 val_hw, val_native;
-	memcpy(&val_hw, buf, sizeof(val_hw));
+	memcpy(&val_hw, buf, sizeof(val_hw)); /* nocheck:blocked */
 	switch (endian) {
 	case G_BIG_ENDIAN:
-		val_native = GUINT16_FROM_BE(val_hw);
+		val_native = GUINT16_FROM_BE(val_hw); /* nocheck:blocked */
 		break;
 	case G_LITTLE_ENDIAN:
-		val_native = GUINT16_FROM_LE(val_hw);
+		val_native = GUINT16_FROM_LE(val_hw); /* nocheck:blocked */
 		break;
 	default:
 		val_native = val_hw;
@@ -172,12 +173,12 @@ fu_memread_uint24(const guint8 *buf, FuEndianType endian)
 	guint32 val_native;
 	switch (endian) {
 	case G_BIG_ENDIAN:
-		memcpy(((guint8 *)&val_hw) + 0x1, buf, 0x3);
-		val_native = GUINT32_FROM_BE(val_hw);
+		memcpy(((guint8 *)&val_hw) + 0x1, buf, 0x3); /* nocheck:blocked */
+		val_native = GUINT32_FROM_BE(val_hw);	     /* nocheck:blocked */
 		break;
 	case G_LITTLE_ENDIAN:
-		memcpy(&val_hw, buf, 0x3);
-		val_native = GUINT32_FROM_LE(val_hw);
+		memcpy(&val_hw, buf, 0x3); /* nocheck:blocked */
+		val_native = GUINT32_FROM_LE(val_hw); /* nocheck:blocked */
 		break;
 	default:
 		val_native = val_hw;
@@ -201,13 +202,13 @@ guint32
 fu_memread_uint32(const guint8 *buf, FuEndianType endian)
 {
 	guint32 val_hw, val_native;
-	memcpy(&val_hw, buf, sizeof(val_hw));
+	memcpy(&val_hw, buf, sizeof(val_hw)); /* nocheck:blocked */
 	switch (endian) {
 	case G_BIG_ENDIAN:
-		val_native = GUINT32_FROM_BE(val_hw);
+		val_native = GUINT32_FROM_BE(val_hw); /* nocheck:blocked */
 		break;
 	case G_LITTLE_ENDIAN:
-		val_native = GUINT32_FROM_LE(val_hw);
+		val_native = GUINT32_FROM_LE(val_hw); /* nocheck:blocked */
 		break;
 	default:
 		val_native = val_hw;
@@ -231,13 +232,13 @@ guint64
 fu_memread_uint64(const guint8 *buf, FuEndianType endian)
 {
 	guint64 val_hw, val_native;
-	memcpy(&val_hw, buf, sizeof(val_hw));
+	memcpy(&val_hw, buf, sizeof(val_hw)); /* nocheck:blocked */
 	switch (endian) {
 	case G_BIG_ENDIAN:
-		val_native = GUINT64_FROM_BE(val_hw);
+		val_native = GUINT64_FROM_BE(val_hw); /* nocheck:blocked */
 		break;
 	case G_LITTLE_ENDIAN:
-		val_native = GUINT64_FROM_LE(val_hw);
+		val_native = GUINT64_FROM_LE(val_hw); /* nocheck:blocked */
 		break;
 	default:
 		val_native = val_hw;
@@ -249,9 +250,12 @@ fu_memread_uint64(const guint8 *buf, FuEndianType endian)
 /**
  * fu_memcmp_safe:
  * @buf1: a buffer
- * @bufsz1: sizeof @buf1
+ * @buf1_sz: sizeof @buf1
+ * @buf1_offset: offset into @buf1
  * @buf2: another buffer
- * @bufsz2: sizeof @buf2
+ * @buf2_sz: sizeof @buf2
+ * @buf2_offset: offset into @buf1
+ * @n: number of bytes to compare from @buf1+@buf1_offset from
  * @error: (nullable): optional return location for an error
  *
  * Compares the buffers for equality.
@@ -261,33 +265,33 @@ fu_memread_uint64(const guint8 *buf, FuEndianType endian)
  * Since: 1.8.2
  **/
 gboolean
-fu_memcmp_safe(const guint8 *buf1, gsize bufsz1, const guint8 *buf2, gsize bufsz2, GError **error)
+fu_memcmp_safe(const guint8 *buf1,
+	       gsize buf1_sz,
+	       gsize buf1_offset,
+	       const guint8 *buf2,
+	       gsize buf2_sz,
+	       gsize buf2_offset,
+	       gsize n,
+	       GError **error)
 {
 	g_return_val_if_fail(buf1 != NULL, FALSE);
 	g_return_val_if_fail(buf2 != NULL, FALSE);
 	g_return_val_if_fail(error == NULL || *error == NULL, FALSE);
 
-	/* not the same length */
-	if (bufsz1 != bufsz2) {
-		g_set_error(error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_INVALID_DATA,
-			    "got %" G_GSIZE_FORMAT " bytes, expected "
-			    "%" G_GSIZE_FORMAT,
-			    bufsz1,
-			    bufsz2);
+	if (!fu_memchk_read(buf1_sz, buf1_offset, n, error))
 		return FALSE;
-	}
+	if (!fu_memchk_read(buf2_sz, buf2_offset, n, error))
+		return FALSE;
 
 	/* check matches */
-	for (guint i = 0x0; i < bufsz1; i++) {
-		if (buf1[i] != buf2[i]) {
+	for (guint i = 0x0; i < n; i++) {
+		if (buf1[buf1_offset + i] != buf2[buf2_offset + i]) {
 			g_set_error(error,
-				    G_IO_ERROR,
-				    G_IO_ERROR_INVALID_DATA,
+				    FWUPD_ERROR,
+				    FWUPD_ERROR_INVALID_DATA,
 				    "got 0x%02x, expected 0x%02x @ 0x%04x",
-				    buf1[i],
-				    buf2[i],
+				    buf1[buf1_offset + i],
+				    buf2[buf2_offset + i],
 				    i);
 			return FALSE;
 		}
@@ -433,7 +437,7 @@ fu_memcpy_safe(guint8 *dst,
 		return FALSE;
 	if (!fu_memchk_write(dst_sz, dst_offset, n, error))
 		return FALSE;
-	memcpy(dst + dst_offset, src + src_offset, n);
+	memcpy(dst + dst_offset, src + src_offset, n); /* nocheck:blocked */
 	return TRUE;
 }
 
@@ -515,7 +519,7 @@ fu_memmem_safe(const guint8 *haystack,
 
 /**
  * fu_memdup_safe:
- * @src: source buffer
+ * @src: (nullable): source buffer
  * @n: number of bytes to copy from @src
  * @error: (nullable): optional return location for an error
  *
@@ -537,19 +541,15 @@ fu_memdup_safe(const guint8 *src, gsize n, GError **error)
 	/* sanity check */
 	if (n > 0x40000000) {
 		g_set_error(error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_NOT_SUPPORTED,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_NOT_SUPPORTED,
 			    "cannot allocate %uGB of memory",
 			    (guint)(n / 0x40000000));
 		return NULL;
 	}
 
-#if GLIB_CHECK_VERSION(2, 67, 3)
 	/* linear block of memory */
 	return g_memdup2(src, n);
-#else
-	return g_memdup(src, (guint)n);
-#endif
 }
 
 /**
@@ -937,4 +937,39 @@ fu_memwrite_uint64_safe(guint8 *buf,
 			      0x0, /* src */
 			      sizeof(tmp),
 			      error);
+}
+
+/**
+ * fu_memstrsafe:
+ * @buf: source buffer
+ * @bufsz: maximum size of @buf, typically `sizeof(buf)`
+ * @offset: offset in bytes into @buf to read from
+ * @maxsz: maximum size of returned string
+ * @error: (nullable): optional return location for an error
+ *
+ * Converts a byte buffer to a ASCII string.
+ *
+ * Returns: (transfer full): a string, or %NULL on error
+ *
+ * Since: 1.9.3
+ **/
+gchar *
+fu_memstrsafe(const guint8 *buf, gsize bufsz, gsize offset, gsize maxsz, GError **error)
+{
+	g_autofree gchar *str = NULL;
+
+	g_return_val_if_fail(buf != NULL, NULL);
+	g_return_val_if_fail(error == NULL || *error == NULL, NULL);
+
+	if (!fu_memchk_read(bufsz, offset, maxsz, error))
+		return NULL;
+	str = fu_strsafe((const gchar *)buf + offset, maxsz);
+	if (str == NULL) {
+		g_set_error_literal(error,
+				    FWUPD_ERROR,
+				    FWUPD_ERROR_INVALID_DATA,
+				    "invalid ASCII string");
+		return NULL;
+	}
+	return g_steal_pointer(&str);
 }

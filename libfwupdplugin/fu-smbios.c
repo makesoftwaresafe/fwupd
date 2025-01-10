@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2017 Richard Hughes <richard@hughsie.com>
+ * Copyright 2017 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #define G_LOG_DOMAIN "FuSmbios"
@@ -19,7 +19,9 @@
 #include "fwupd-error.h"
 
 #include "fu-byte-array.h"
+#include "fu-bytes.h"
 #include "fu-common.h"
+#include "fu-input-stream.h"
 #include "fu-path.h"
 #include "fu-smbios-private.h"
 #include "fu-smbios-struct.h"
@@ -48,6 +50,17 @@ typedef struct {
 
 G_DEFINE_TYPE(FuSmbios, fu_smbios, FU_TYPE_FIRMWARE)
 
+static FuSmbiosItem *
+fu_smbios_get_item_for_type(FuSmbios *self, guint8 type)
+{
+	for (guint i = 0; i < self->items->len; i++) {
+		FuSmbiosItem *item = g_ptr_array_index(self->items, i);
+		if (item->type == type)
+			return item;
+	}
+	return NULL;
+}
+
 static gboolean
 fu_smbios_setup_from_data(FuSmbios *self, const guint8 *buf, gsize bufsz, GError **error)
 {
@@ -55,7 +68,7 @@ fu_smbios_setup_from_data(FuSmbios *self, const guint8 *buf, gsize bufsz, GError
 	for (gsize i = 0; i < bufsz; i++) {
 		FuSmbiosItem *item;
 		guint8 length;
-		g_autoptr(GByteArray) st_str = NULL;
+		g_autoptr(FuStructSmbiosStructure) st_str = NULL;
 
 		/* sanity check */
 		st_str = fu_struct_smbios_structure_parse(buf, bufsz, i, error);
@@ -105,6 +118,17 @@ fu_smbios_setup_from_data(FuSmbios *self, const guint8 *buf, gsize bufsz, GError
 			g_ptr_array_add(item->strings, g_string_free(str, FALSE));
 		}
 	}
+
+	/* this has to exist */
+	if (fu_smbios_get_item_for_type(self, FU_SMBIOS_STRUCTURE_TYPE_SYSTEM) == NULL) {
+		g_set_error_literal(error,
+				    FWUPD_ERROR,
+				    FWUPD_ERROR_INVALID_FILE,
+				    "no structure with required type SYSTEM");
+		return FALSE;
+	}
+
+	/* success */
 	return TRUE;
 }
 
@@ -181,7 +205,7 @@ fu_smbios_parse_ep32(FuSmbios *self, const guint8 *buf, gsize bufsz, GError **er
 	version_str = g_strdup_printf("%u.%u",
 				      fu_struct_smbios_ep32_get_smbios_major_ver(st_ep32),
 				      fu_struct_smbios_ep32_get_smbios_minor_ver(st_ep32));
-	fu_firmware_set_version(FU_FIRMWARE(self), version_str);
+	fu_firmware_set_version(FU_FIRMWARE(self), version_str); /* nocheck:set-version */
 	fu_firmware_set_version_raw(
 	    FU_FIRMWARE(self),
 	    (((guint16)fu_struct_smbios_ep32_get_smbios_major_ver(st_ep32)) << 8) +
@@ -213,7 +237,7 @@ fu_smbios_parse_ep64(FuSmbios *self, const guint8 *buf, gsize bufsz, GError **er
 	version_str = g_strdup_printf("%u.%u",
 				      fu_struct_smbios_ep64_get_smbios_major_ver(st_ep64),
 				      fu_struct_smbios_ep64_get_smbios_minor_ver(st_ep64));
-	fu_firmware_set_version(FU_FIRMWARE(self), version_str);
+	fu_firmware_set_version(FU_FIRMWARE(self), version_str); /* nocheck:set-version */
 	return TRUE;
 }
 
@@ -244,8 +268,10 @@ fu_smbios_setup_from_path(FuSmbios *self, const gchar *path, GError **error)
 
 	/* get the smbios entry point */
 	ep_fn = g_build_filename(path, "smbios_entry_point", NULL);
-	if (!g_file_get_contents(ep_fn, &ep_raw, &sz, error))
+	if (!g_file_get_contents(ep_fn, &ep_raw, &sz, error)) {
+		fu_error_convert(error);
 		return FALSE;
+	}
 
 	/* check we got enough data to read the signature */
 	if (sz < 5) {
@@ -278,8 +304,10 @@ fu_smbios_setup_from_path(FuSmbios *self, const gchar *path, GError **error)
 
 	/* get the DMI data */
 	dmi_fn = g_build_filename(path, "DMI", NULL);
-	if (!g_file_get_contents(dmi_fn, &dmi_raw, &sz, error))
+	if (!g_file_get_contents(dmi_fn, &dmi_raw, &sz, error)) {
+		fu_error_convert(error);
 		return FALSE;
+	}
 	if (sz > self->structure_table_len) {
 		g_set_error(error,
 			    FWUPD_ERROR,
@@ -296,16 +324,17 @@ fu_smbios_setup_from_path(FuSmbios *self, const gchar *path, GError **error)
 }
 
 static gboolean
-fu_smbios_parse(FuFirmware *firmware,
-		GBytes *fw,
-		gsize offset,
-		FwupdInstallFlags flags,
-		GError **error)
+fu_smbios_parse(FuFirmware *firmware, GInputStream *stream, FwupdInstallFlags flags, GError **error)
 {
 	FuSmbios *self = FU_SMBIOS(firmware);
-	gsize bufsz = 0;
-	const guint8 *buf = g_bytes_get_data(fw, &bufsz);
-	return fu_smbios_setup_from_data(self, buf, bufsz, error);
+	g_autoptr(GBytes) fw = NULL;
+	fw = fu_input_stream_read_bytes(stream, 0x0, G_MAXSIZE, NULL, error);
+	if (fw == NULL)
+		return FALSE;
+	return fu_smbios_setup_from_data(self,
+					 g_bytes_get_data(fw, NULL),
+					 g_bytes_get_size(fw),
+					 error);
 }
 
 #ifdef _WIN32
@@ -385,7 +414,7 @@ fu_smbios_setup(FuSmbios *self, GError **error)
 		return FALSE;
 	}
 	if (!fu_smbios_setup_from_path(self, path, &error_local)) {
-		if (!g_error_matches(error_local, G_FILE_ERROR, G_FILE_ERROR_ACCES)) {
+		if (!g_error_matches(error_local, FWUPD_ERROR, FWUPD_ERROR_INVALID_FILE)) {
 			g_propagate_error(error, g_steal_pointer(&error_local));
 			return FALSE;
 		}
@@ -417,47 +446,40 @@ fu_smbios_export(FuFirmware *firmware, FuFirmwareExportFlags flags, XbBuilderNod
 	}
 }
 
-static FuSmbiosItem *
-fu_smbios_get_item_for_type(FuSmbios *self, guint8 type)
-{
-	for (guint i = 0; i < self->items->len; i++) {
-		FuSmbiosItem *item = g_ptr_array_index(self->items, i);
-		if (item->type == type)
-			return item;
-	}
-	return NULL;
-}
-
 /**
  * fu_smbios_get_data:
  * @self: a #FuSmbios
  * @type: a structure type, e.g. %FU_SMBIOS_STRUCTURE_TYPE_BIOS
  * @error: (nullable): optional return location for an error
  *
- * Reads a SMBIOS data blob, which includes the SMBIOS section header.
+ * Reads all the SMBIOS data blobs of a specified type.
  *
- * Returns: (transfer full): a #GBytes, or %NULL if invalid or not found
+ * Returns: (transfer container) (element-type GBytes): a #GBytes, or %NULL if invalid or not found
  *
- * Since: 1.0.0
+ * Since: 1.9.8
  **/
-GBytes *
+GPtrArray *
 fu_smbios_get_data(FuSmbios *self, guint8 type, GError **error)
 {
-	FuSmbiosItem *item;
+	g_autoptr(GPtrArray) array = g_ptr_array_new_with_free_func((GDestroyNotify)g_bytes_unref);
 
 	g_return_val_if_fail(FU_IS_SMBIOS(self), NULL);
 	g_return_val_if_fail(error == NULL || *error == NULL, NULL);
 
-	item = fu_smbios_get_item_for_type(self, type);
-	if (item == NULL) {
+	for (guint i = 0; i < self->items->len; i++) {
+		FuSmbiosItem *item = g_ptr_array_index(self->items, i);
+		if (item->type == type && item->buf->len > 0)
+			g_ptr_array_add(array, g_bytes_new(item->buf->data, item->buf->len));
+	}
+	if (array->len == 0) {
 		g_set_error(error,
 			    FWUPD_ERROR,
 			    FWUPD_ERROR_INVALID_FILE,
-			    "no structure with type %02x",
+			    "no structures with type %02x",
 			    type);
 		return NULL;
 	}
-	return g_bytes_new(item->buf->data, item->buf->len);
+	return g_steal_pointer(&array);
 }
 
 /**
@@ -590,10 +612,10 @@ static void
 fu_smbios_class_init(FuSmbiosClass *klass)
 {
 	GObjectClass *object_class = G_OBJECT_CLASS(klass);
-	FuFirmwareClass *klass_firmware = FU_FIRMWARE_CLASS(klass);
+	FuFirmwareClass *firmware_class = FU_FIRMWARE_CLASS(klass);
 	object_class->finalize = fu_smbios_finalize;
-	klass_firmware->parse = fu_smbios_parse;
-	klass_firmware->export = fu_smbios_export;
+	firmware_class->parse = fu_smbios_parse;
+	firmware_class->export = fu_smbios_export;
 }
 
 static void

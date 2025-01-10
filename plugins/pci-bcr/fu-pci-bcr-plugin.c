@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2020 Richard Hughes <richard@hughsie.com>
+ * Copyright 2020 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #include "config.h"
@@ -25,9 +25,9 @@ static void
 fu_pci_bcr_plugin_to_string(FuPlugin *plugin, guint idt, GString *str)
 {
 	FuPciBcrPlugin *self = FU_PCI_BCR_PLUGIN(plugin);
-	fu_string_append_kb(str, idt, "HasDevice", self->has_device);
-	fu_string_append_kx(str, idt, "BcrAddr", self->bcr_addr);
-	fu_string_append_kx(str, idt, "Bcr", self->bcr);
+	fwupd_codec_string_append_bool(str, idt, "HasDevice", self->has_device);
+	fwupd_codec_string_append_hex(str, idt, "BcrAddr", self->bcr_addr);
+	fwupd_codec_string_append_hex(str, idt, "Bcr", self->bcr);
 }
 
 static void
@@ -54,7 +54,7 @@ fu_pci_bcr_plugin_device_registered(FuPlugin *plugin, FuDevice *dev)
 		}
 	}
 	if (g_strcmp0(fu_device_get_plugin(dev), "flashrom") == 0 &&
-	    fu_device_has_instance_id(dev, "main-system-firmware")) {
+	    fu_device_has_private_flag(dev, FU_DEVICE_PRIVATE_FLAG_HOST_FIRMWARE)) {
 		/* PCI\VEN_8086 added first */
 		if (self->has_device) {
 			fu_pci_bcr_plugin_set_updatable(plugin, dev);
@@ -65,7 +65,7 @@ fu_pci_bcr_plugin_device_registered(FuPlugin *plugin, FuDevice *dev)
 }
 
 static void
-fu_plugin_add_security_attr_bioswe(FuPlugin *plugin, FuSecurityAttrs *attrs)
+fu_pci_bcr_plugin_add_security_attr_bioswe(FuPlugin *plugin, FuSecurityAttrs *attrs)
 {
 	FuPciBcrPlugin *self = FU_PCI_BCR_PLUGIN(plugin);
 	FuDevice *msf_device = fu_plugin_cache_lookup(plugin, "main-system-firmware");
@@ -75,6 +75,7 @@ fu_plugin_add_security_attr_bioswe(FuPlugin *plugin, FuSecurityAttrs *attrs)
 	attr = fu_plugin_security_attr_new(plugin, FWUPD_SECURITY_ATTR_ID_SPI_BIOSWE);
 	if (msf_device != NULL)
 		fwupd_security_attr_add_guids(attr, fu_device_get_guids(msf_device));
+	fwupd_security_attr_set_result_success(attr, FWUPD_SECURITY_ATTR_RESULT_NOT_ENABLED);
 	fu_security_attrs_append(attrs, attr);
 
 	/* no device */
@@ -92,11 +93,10 @@ fu_plugin_add_security_attr_bioswe(FuPlugin *plugin, FuSecurityAttrs *attrs)
 
 	/* success */
 	fwupd_security_attr_add_flag(attr, FWUPD_SECURITY_ATTR_FLAG_SUCCESS);
-	fwupd_security_attr_set_result(attr, FWUPD_SECURITY_ATTR_RESULT_NOT_ENABLED);
 }
 
 static void
-fu_plugin_add_security_attr_ble(FuPlugin *plugin, FuSecurityAttrs *attrs)
+fu_pci_bcr_plugin_add_security_attr_ble(FuPlugin *plugin, FuSecurityAttrs *attrs)
 {
 	FuPciBcrPlugin *self = FU_PCI_BCR_PLUGIN(plugin);
 	FuDevice *msf_device = fu_plugin_cache_lookup(plugin, "main-system-firmware");
@@ -106,6 +106,7 @@ fu_plugin_add_security_attr_ble(FuPlugin *plugin, FuSecurityAttrs *attrs)
 	attr = fu_plugin_security_attr_new(plugin, FWUPD_SECURITY_ATTR_ID_SPI_BLE);
 	if (msf_device != NULL)
 		fwupd_security_attr_add_guids(attr, fu_device_get_guids(msf_device));
+	fwupd_security_attr_set_result_success(attr, FWUPD_SECURITY_ATTR_RESULT_ENABLED);
 	fu_security_attrs_append(attrs, attr);
 
 	/* no device */
@@ -122,11 +123,10 @@ fu_plugin_add_security_attr_ble(FuPlugin *plugin, FuSecurityAttrs *attrs)
 
 	/* success */
 	fwupd_security_attr_add_flag(attr, FWUPD_SECURITY_ATTR_FLAG_SUCCESS);
-	fwupd_security_attr_set_result(attr, FWUPD_SECURITY_ATTR_RESULT_ENABLED);
 }
 
 static void
-fu_plugin_add_security_attr_smm_bwp(FuPlugin *plugin, FuSecurityAttrs *attrs)
+fu_pci_bcr_plugin_add_security_attr_smm_bwp(FuPlugin *plugin, FuSecurityAttrs *attrs)
 {
 	FuPciBcrPlugin *self = FU_PCI_BCR_PLUGIN(plugin);
 	FuDevice *msf_device = fu_plugin_cache_lookup(plugin, "main-system-firmware");
@@ -136,6 +136,7 @@ fu_plugin_add_security_attr_smm_bwp(FuPlugin *plugin, FuSecurityAttrs *attrs)
 	attr = fu_plugin_security_attr_new(plugin, FWUPD_SECURITY_ATTR_ID_SPI_SMM_BWP);
 	if (msf_device != NULL)
 		fwupd_security_attr_add_guids(attr, fu_device_get_guids(msf_device));
+	fwupd_security_attr_set_result_success(attr, FWUPD_SECURITY_ATTR_RESULT_LOCKED);
 	fu_security_attrs_append(attrs, attr);
 
 	/* no device */
@@ -152,7 +153,6 @@ fu_plugin_add_security_attr_smm_bwp(FuPlugin *plugin, FuSecurityAttrs *attrs)
 
 	/* success */
 	fwupd_security_attr_add_flag(attr, FWUPD_SECURITY_ATTR_FLAG_SUCCESS);
-	fwupd_security_attr_set_result(attr, FWUPD_SECURITY_ATTR_RESULT_LOCKED);
 }
 
 static gboolean
@@ -163,6 +163,7 @@ fu_pci_bcr_plugin_backend_device_added(FuPlugin *plugin,
 {
 	FuPciBcrPlugin *self = FU_PCI_BCR_PLUGIN(plugin);
 	FuDevice *device_msf;
+	g_autofree gchar *device_file = NULL;
 	g_autoptr(FuDeviceLocker) locker = NULL;
 
 	/* not supported */
@@ -175,15 +176,14 @@ fu_pci_bcr_plugin_backend_device_added(FuPlugin *plugin,
 	}
 
 	/* interesting device? */
-	if (!FU_IS_UDEV_DEVICE(device))
-		return TRUE;
-	if (g_strcmp0(fu_udev_device_get_subsystem(FU_UDEV_DEVICE(device)), "pci") != 0)
+	if (!FU_IS_PCI_DEVICE(device))
 		return TRUE;
 
 	/* open the config */
-	fu_udev_device_set_flags(FU_UDEV_DEVICE(device), FU_UDEV_DEVICE_FLAG_USE_CONFIG);
-	if (!fu_udev_device_set_physical_id(FU_UDEV_DEVICE(device), "pci", error))
-		return FALSE;
+	device_file =
+	    g_build_filename(fu_udev_device_get_sysfs_path(FU_UDEV_DEVICE(device)), "config", NULL);
+	fu_udev_device_set_device_file(FU_UDEV_DEVICE(device), device_file);
+	fu_udev_device_add_open_flag(FU_UDEV_DEVICE(device), FU_IO_CHANNEL_OPEN_FLAG_READ);
 	locker = fu_device_locker_new(device, error);
 	if (locker == NULL)
 		return FALSE;
@@ -212,9 +212,9 @@ fu_pci_bcr_plugin_add_security_attrs(FuPlugin *plugin, FuSecurityAttrs *attrs)
 		return;
 
 	/* add attrs */
-	fu_plugin_add_security_attr_bioswe(plugin, attrs);
-	fu_plugin_add_security_attr_ble(plugin, attrs);
-	fu_plugin_add_security_attr_smm_bwp(plugin, attrs);
+	fu_pci_bcr_plugin_add_security_attr_bioswe(plugin, attrs);
+	fu_pci_bcr_plugin_add_security_attr_ble(plugin, attrs);
+	fu_pci_bcr_plugin_add_security_attr_smm_bwp(plugin, attrs);
 }
 
 static void

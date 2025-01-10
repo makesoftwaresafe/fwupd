@@ -1,3 +1,0 @@
-[Test]
-Type=session
-Exec=sh -c "G_TEST_SRCDIR=@installedtestsdatadir@ G_TEST_BUILDDIR=@installedtestsdatadir@ @installedtestsbindir@/fwupd.sh"

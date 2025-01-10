@@ -2,6 +2,16 @@ _fwupdtool_cmd_list=(
 	'activate'
 	'build-cabinet'
 	'clear-history'
+	'disable-remote'
+	'disable-test-devices'
+	'efivar-list'
+	'efivar-boot'
+	'efivar-files'
+	'enable-remote'
+	'enable-test-devices'
+	'emulation-tag'
+	'emulation-untag'
+	'emulation-load'
 	'esp-list'
 	'esp-mount'
 	'esp-unmount'
@@ -25,14 +35,19 @@ _fwupdtool_cmd_list=(
 	'get-remotes'
 	'get-report-metadata'
 	'get-topology'
+	'get-version-formats'
 	'hwids'
 	'update'
 	'upgrade'
 	'install'
 	'install-blob'
+	'modify-config'
+	'modify-remote'
 	'monitor'
 	'reinstall'
 	'security'
+	'security-fix'
+	'security-undo'
 	'set-bios-setting'
 	'switch-branch'
 	'self-sign'
@@ -47,13 +62,18 @@ _fwupdtool_cmd_list=(
 	'unbind-driver'
 	'bind-driver'
 	'export-hwids'
+	'reboot-cleanup'
+	'vercmp'
 )
 
 _fwupdtool_opts=(
 	'--verbose'
 	'--allow-reinstall'
 	'--allow-older'
+	'--filter'
+	'--filter-release'
 	'--force'
+	'--json'
 	'--show-all'
 	'--plugins'
 	'--prepare'
@@ -65,8 +85,135 @@ _fwupdtool_opts=(
 	'--no-search'
 	'--ignore-checksum'
 	'--ignore-vid-pid'
+	'--ignore-requirements'
 	'--save-backends'
 )
+
+
+fwupd_modify_config_sections=(
+	'fwupd'
+	'msr'
+	'redfish'
+	'test'
+	'thunderbolt'
+	'uefi_capsule'
+	'dell_kestrel'
+)
+
+fwupd_modify_config_opts=(
+	'ArchiveSizeMax'
+	'ApprovedFirmware'
+	'BlockedFirmware'
+	'DisabledDevices'
+	'DisabledPlugins'
+	'EspLocation'
+	'EnumerateAllDevices'
+	'HostBkc'
+	'IdleTimeout'
+	'IgnorePower'
+	'OnlyTrusted'
+	'P2pPolicy'
+	'ReleaseDedupe'
+	'ReleasePriority'
+	'ShowDevicePrivate'
+	'TestDevices'
+	'TrustedReports'
+	'TrustedUids'
+	'UpdateMotd'
+	'UriSchemes'
+	'VerboseDomains'
+)
+
+test_modify_config_opts=(
+	'AnotherWriteRequired'
+	'CompositeChild'
+	'DecompressDelay'
+	'NeedsActivation'
+	'NeedsReboot'
+	'RegistrationSupported'
+	'RequestDelay'
+	'RequestSupported'
+	'VerifyDelay'
+	'WriteDelay'
+	'WriteSupported'
+)
+
+redfish_modify_config_opts=(
+	'CACheck'
+	'IpmiDisableCreateUser'
+	'ManagerResetTimeout'
+	'Password'
+	'Uri'
+	'Username'
+	'UserUri'
+)
+
+uefi_capsule_modify_config_opts=(
+	'DisableCapsuleUpdateOnDisk'
+	'DisableShimForSecureBoot'
+	'EnableEfiDebugging'
+	'EnableGrubChainLoad'
+	'OverrideESPMountPoint'
+	'RebootCleanup'
+	'RequireESPFreeSpace'
+	'ScreenWidth'
+	'ScreenHeight'
+)
+
+dell_kestrel_modify_config_opts=(
+	'UpdateOnDisconnect'
+)
+
+reset_config_opts=(
+	'fwupd'
+	'msr'
+	'redfish'
+	'test'
+	'thunderbolt'
+	'uefi_capsule'
+)
+
+_show_fwupd_modify_sections()
+{
+	COMPREPLY+=( $(compgen -W '${fwupd_modify_config_sections[@]}' -- "$cur") )
+}
+
+_show_fwupd_modify_config()
+{
+	COMPREPLY+=( $(compgen -W '${fwupd_modify_config_opts[@]}' -- "$cur") )
+}
+
+_show_test_modify_config()
+{
+	COMPREPLY+=( $(compgen -W '${test_modify_config_opts[@]}' -- "$cur") )
+}
+
+_show_redfish_modify_config()
+{
+	COMPREPLY+=( $(compgen -W '${redfish_modify_config_opts[@]}' -- "$cur") )
+}
+
+_show_uefi_capsule_modify_config()
+{
+	COMPREPLY+=( $(compgen -W '${uefi_capsule_modify_config_opts[@]}' -- "$cur") )
+}
+
+_show_dell_kestrel_modify_config()
+{
+	COMPREPLY+=( $(compgen -W '${dell_kestrel_modify_config_opts[@]}' -- "$cur") )
+}
+
+_show_reset_config()
+{
+	COMPREPLY+=( $(compgen -W '${reset_config_opts[@]}' -- "$cur") )
+}
+
+_show_remotes()
+{
+	local remotes
+	remotes="$(command fwupdtool get-remotes --json 2>/dev/null | jq '.Remotes | .[] | .Id')"
+	COMPREPLY+=( $(compgen -W "${remotes}" -- "$cur") )
+}
 
 _show_filters()
 {
@@ -136,6 +283,12 @@ _fwupdtool()
 			_show_device_ids
 		fi
 		;;
+	emulation-load)
+		#find files
+		if [[ "$args" = "2" ]]; then
+			_filedir
+		fi
+		;;
 	attach|detach|activate|verify-update|reinstall|get-updates)
 		#device ID
 		if [[ "$args" = "2" ]]; then
@@ -164,6 +317,102 @@ _fwupdtool()
 		#firmware_type out
 		elif [[ "$args" = "5" ]]; then
 			_show_firmware_types
+		fi
+		;;
+	modify-remote)
+		#find remotes
+		if [[ "$args" = "2" ]]; then
+			_show_remotes
+		#add key
+		elif [[ "$args" = "3" ]]; then
+			local keys
+			keys="$(command fwupdtool get-remotes | command awk -v pattern="Remote ID:.*${prev}$" '$0~pattern{show=1; next}/Remote/{show=0}{gsub(/:.*/,"")}show')"
+			COMPREPLY+=( $(compgen -W "${keys}" -- "$cur") )
+		fi
+		;;
+	enable-remote)
+		#find remotes
+		if [[ "$args" = "2" ]]; then
+			_show_remotes
+		fi
+		;;
+	disable-remote)
+		#find remotes
+		if [[ "$args" = "2" ]]; then
+			_show_remotes
+		fi
+		;;
+	modify-config)
+		if [[ "$args" = "2" ]]; then
+			_show_fwupd_modify_sections
+			return 0
+		elif [[ "$args" = "3" ]]; then
+			case $prev in
+			test)
+				_show_test_modify_config
+				;;
+			msr)
+				COMPREPLY+=( $(compgen -W 'DelayedActivation MinimumSmeKernelVersion' -- "$cur") )
+				;;
+			thunderbolt)
+				COMPREPLY+=( $(compgen -W 'DelayedActivation MinimumKernelVersion' -- "$cur") )
+				;;
+			fwupd)
+				_show_fwupd_modify_config
+				;;
+			redfish)
+				_show_redfish_modify_config
+				;;
+			uefi_capsule)
+				_show_uefi_capsule_modify_config
+				;;
+			dell_kestrel)
+				_show_dell_kestrel_modify_config
+				;;
+			esac
+			return 0
+		elif [[ "$args" = "4" ]]; then
+			case $prev in
+			EnumerateAllDevices|OnlyTrusted|IgnorePower|UpdateMotd|ShowDevicePrivate|ReleaseDedupe|TestDevices)
+				COMPREPLY=( $(compgen -W "True False" -- "$cur") )
+				;;
+			AnotherWriteRequired|NeedsActivation|NeedsReboot|RegistrationSupported|RequestSupported|WriteSupported)
+				COMPREPLY=( $(compgen -W "True False" -- "$cur") )
+				;;
+			ReleasePriority)
+				COMPREPLY=( $(compgen -W "local remote" -- "$cur") )
+				;;
+			UriSchemes)
+				COMPREPLY=( $(compgen -W "file https http ipfs file;https;http;ipfs file;https;http https;http" -- "$cur") )
+				;;
+			P2pPolicy)
+				COMPREPLY=( $(compgen -W "none metadata firmware metadata,firmware" -- "$cur") )
+				;;
+			IdleTimeout|ArchiveSizeMax|HostBkc|TrustedUids)
+				;;
+			ApprovedFirmware|BlockedFirmware)
+				;;
+			DisabledDevices)
+				_show_device_ids
+				;;
+			DisabledPlugins)
+				_show_plugins
+				;;
+			EspLocation)
+				;;
+			TrustedReports)
+				;;
+			VerboseDomains)
+				;;
+			esac
+			return 0;
+		fi
+		;;
+	reset-config)
+		#find files
+		if [[ "$args" = "2" ]]; then
+			_show_reset_config
+			return 0
 		fi
 		;;
 	*)

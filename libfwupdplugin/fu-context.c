@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2021 Richard Hughes <richard@hughsie.com>
+ * Copyright 2021 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #define G_LOG_DOMAIN "FuContext"
@@ -9,11 +9,18 @@
 #include "config.h"
 
 #include "fu-bios-settings-private.h"
+#include "fu-common-private.h"
 #include "fu-config-private.h"
+#include "fu-context-helper.h"
 #include "fu-context-private.h"
+#include "fu-dummy-efivars.h"
+#include "fu-efi-device-path-list.h"
+#include "fu-efi-file-path-device-path.h"
+#include "fu-efi-hard-drive-device-path.h"
 #include "fu-fdt-firmware.h"
 #include "fu-hwids-private.h"
 #include "fu-path.h"
+#include "fu-pefile-firmware.h"
 #include "fu-smbios-private.h"
 #include "fu-volume-private.h"
 
@@ -31,27 +38,31 @@ typedef struct {
 	FuSmbios *smbios;
 	FuSmbiosChassisKind chassis_kind;
 	FuQuirks *quirks;
+	FuEfivars *efivars;
+	GPtrArray *backends;
 	GHashTable *runtime_versions;
 	GHashTable *compile_versions;
-	GPtrArray *udev_subsystems;
+	GHashTable *udev_subsystems; /* utf8:GPtrArray */
 	GPtrArray *esp_volumes;
 	GHashTable *firmware_gtypes; /* utf8:GType */
-	GHashTable *hwid_flags; /* str: */
+	GHashTable *hwid_flags;	     /* str: */
 	FuPowerState power_state;
 	FuLidState lid_state;
+	FuDisplayState display_state;
 	guint battery_level;
 	guint battery_threshold;
 	FuBiosSettings *host_bios_settings;
-	gboolean loaded_hwinfo;
 	FuFirmware *fdt; /* optional */
+	gchar *esp_location;
 } FuContextPrivate;
 
-enum { SIGNAL_SECURITY_CHANGED, SIGNAL_LAST };
+enum { SIGNAL_SECURITY_CHANGED, SIGNAL_HOUSEKEEPING, SIGNAL_LAST };
 
 enum {
 	PROP_0,
 	PROP_POWER_STATE,
 	PROP_LID_STATE,
+	PROP_DISPLAY_STATE,
 	PROP_BATTERY_LEVEL,
 	PROP_BATTERY_THRESHOLD,
 	PROP_FLAGS,
@@ -133,6 +144,24 @@ fu_context_get_fdt(FuContext *self, GError **error)
 }
 
 /**
+ * fu_context_get_efivars:
+ * @self: a #FuContext
+ *
+ * Gets the EFI variable store.
+ *
+ * Returns: (transfer none): a #FuEfivars
+ *
+ * Since: 2.0.0
+ **/
+FuEfivars *
+fu_context_get_efivars(FuContext *self)
+{
+	FuContextPrivate *priv = GET_PRIVATE(self);
+	g_return_val_if_fail(FU_IS_CONTEXT(self), NULL);
+	return priv->efivars;
+}
+
+/**
  * fu_context_get_smbios:
  * @self: a #FuContext
  *
@@ -207,7 +236,7 @@ fu_context_get_smbios_string(FuContext *self, guint8 structure_type, guint8 offs
 {
 	FuContextPrivate *priv = GET_PRIVATE(self);
 	g_return_val_if_fail(FU_IS_CONTEXT(self), NULL);
-	if (!priv->loaded_hwinfo) {
+	if (!fu_context_has_flag(self, FU_CONTEXT_FLAG_LOADED_HWINFO)) {
 		g_critical("cannot use SMBIOS before calling ->load_hwinfo()");
 		return NULL;
 	}
@@ -220,34 +249,26 @@ fu_context_get_smbios_string(FuContext *self, guint8 structure_type, guint8 offs
  * @structure_type: a SMBIOS structure type, e.g. %FU_SMBIOS_STRUCTURE_TYPE_BIOS
  * @error: (nullable): optional return location for an error
  *
- * Gets a hardware SMBIOS data.
+ * Gets all hardware SMBIOS data for a specific type.
  *
- * Returns: (transfer full): a #GBytes, or %NULL
+ * Returns: (transfer container) (element-type GBytes): a #GBytes, or %NULL if not found
  *
- * Since: 1.6.0
+ * Since: 1.9.8
  **/
-GBytes *
+GPtrArray *
 fu_context_get_smbios_data(FuContext *self, guint8 structure_type, GError **error)
 {
 	FuContextPrivate *priv = GET_PRIVATE(self);
-	g_autoptr(GBytes) blob = NULL;
 
 	g_return_val_if_fail(FU_IS_CONTEXT(self), NULL);
 
 	/* must be valid and non-zero length */
-	if (!priv->loaded_hwinfo) {
+	if (!fu_context_has_flag(self, FU_CONTEXT_FLAG_LOADED_HWINFO)) {
 		g_critical("cannot use SMBIOS before calling ->load_hwinfo()");
-		g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_INITIALIZED, "no data");
+		g_set_error_literal(error, FWUPD_ERROR, FWUPD_ERROR_INTERNAL, "no data");
 		return NULL;
 	}
-	blob = fu_smbios_get_data(priv->smbios, structure_type, error);
-	if (blob == NULL)
-		return NULL;
-	if (g_bytes_get_size(blob) == 0) {
-		g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA, "no data");
-		return NULL;
-	}
-	return g_steal_pointer(&blob);
+	return fu_smbios_get_data(priv->smbios, structure_type, error);
 }
 
 /**
@@ -271,7 +292,7 @@ fu_context_get_smbios_integer(FuContext *self, guint8 type, guint8 offset, GErro
 {
 	FuContextPrivate *priv = GET_PRIVATE(self);
 	g_return_val_if_fail(FU_IS_CONTEXT(self), G_MAXUINT);
-	if (!priv->loaded_hwinfo) {
+	if (!fu_context_has_flag(self, FU_CONTEXT_FLAG_LOADED_HWINFO)) {
 		g_critical("cannot use SMBIOS before calling ->load_hwinfo()");
 		return G_MAXUINT;
 	}
@@ -404,7 +425,7 @@ fu_context_has_hwid_guid(FuContext *self, const gchar *guid)
 {
 	FuContextPrivate *priv = GET_PRIVATE(self);
 	g_return_val_if_fail(FU_IS_CONTEXT(self), FALSE);
-	if (!priv->loaded_hwinfo) {
+	if (!fu_context_has_flag(self, FU_CONTEXT_FLAG_LOADED_HWINFO)) {
 		g_critical("cannot use HWIDs before calling ->load_hwinfo()");
 		return FALSE;
 	}
@@ -427,7 +448,7 @@ fu_context_get_hwid_guids(FuContext *self)
 {
 	FuContextPrivate *priv = GET_PRIVATE(self);
 	g_return_val_if_fail(FU_IS_CONTEXT(self), NULL);
-	if (!priv->loaded_hwinfo) {
+	if (!fu_context_has_flag(self, FU_CONTEXT_FLAG_LOADED_HWINFO)) {
 		g_critical("cannot use HWIDs before calling ->load_hwinfo()");
 		return NULL;
 	}
@@ -452,7 +473,7 @@ fu_context_get_hwid_value(FuContext *self, const gchar *key)
 	FuContextPrivate *priv = GET_PRIVATE(self);
 	g_return_val_if_fail(FU_IS_CONTEXT(self), NULL);
 	g_return_val_if_fail(key != NULL, NULL);
-	if (!priv->loaded_hwinfo) {
+	if (!fu_context_has_flag(self, FU_CONTEXT_FLAG_LOADED_HWINFO)) {
 		g_critical("cannot use HWIDs before calling ->load_hwinfo()");
 		return NULL;
 	}
@@ -481,9 +502,9 @@ fu_context_get_hwid_replace_value(FuContext *self, const gchar *keys, GError **e
 	g_return_val_if_fail(keys != NULL, NULL);
 	g_return_val_if_fail(error == NULL || *error == NULL, NULL);
 
-	if (!priv->loaded_hwinfo) {
+	if (!fu_context_has_flag(self, FU_CONTEXT_FLAG_LOADED_HWINFO)) {
 		g_critical("cannot use HWIDs before calling ->load_hwinfo()");
-		g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_INITIALIZED, "no data");
+		g_set_error_literal(error, FWUPD_ERROR, FWUPD_ERROR_INTERNAL, "no data");
 		return NULL;
 	}
 	return fu_hwids_get_replace_values(priv->hwids, keys, error);
@@ -514,21 +535,45 @@ fu_context_add_runtime_version(FuContext *self, const gchar *component_id, const
 }
 
 /**
- * fu_context_set_runtime_versions:
+ * fu_context_get_runtime_version:
  * @self: a #FuContext
- * @runtime_versions: (element-type utf8 utf8): dictionary of versions
+ * @component_id: an AppStream component id, e.g. `org.gnome.Software`
  *
- * Sets the runtime versions for a plugin.
+ * Sets a runtime version of a specific dependency.
  *
- * Since: 1.6.0
+ * Returns: a version string, e.g. `1.2.3`, or %NULL
+ *
+ * Since: 1.9.10
  **/
-void
-fu_context_set_runtime_versions(FuContext *self, GHashTable *runtime_versions)
+const gchar *
+fu_context_get_runtime_version(FuContext *self, const gchar *component_id)
 {
 	FuContextPrivate *priv = GET_PRIVATE(self);
-	g_return_if_fail(FU_IS_CONTEXT(self));
-	g_return_if_fail(runtime_versions != NULL);
-	priv->runtime_versions = g_hash_table_ref(runtime_versions);
+
+	g_return_val_if_fail(FU_IS_CONTEXT(self), NULL);
+	g_return_val_if_fail(component_id != NULL, NULL);
+
+	if (priv->runtime_versions == NULL)
+		return NULL;
+	return g_hash_table_lookup(priv->runtime_versions, component_id);
+}
+
+/**
+ * fu_context_get_runtime_versions:
+ * @self: a #FuContext
+ *
+ * Gets the runtime versions for the context.
+ *
+ * Returns: (transfer none) (element-type utf8 utf8): dictionary of versions
+ *
+ * Since: 1.9.10
+ **/
+GHashTable *
+fu_context_get_runtime_versions(FuContext *self)
+{
+	FuContextPrivate *priv = GET_PRIVATE(self);
+	g_return_val_if_fail(FU_IS_CONTEXT(self), NULL);
+	return priv->runtime_versions;
 }
 
 /**
@@ -556,27 +601,36 @@ fu_context_add_compile_version(FuContext *self, const gchar *component_id, const
 }
 
 /**
- * fu_context_set_compile_versions:
+ * fu_context_get_compile_versions:
  * @self: a #FuContext
- * @compile_versions: (element-type utf8 utf8): dictionary of versions
  *
- * Sets the compile time versions for a plugin.
+ * Gets the compile time versions for the context.
  *
- * Since: 1.6.0
+ * Returns: (transfer none) (element-type utf8 utf8): dictionary of versions
+ *
+ * Since: 1.9.10
  **/
-void
-fu_context_set_compile_versions(FuContext *self, GHashTable *compile_versions)
+GHashTable *
+fu_context_get_compile_versions(FuContext *self)
 {
 	FuContextPrivate *priv = GET_PRIVATE(self);
-	g_return_if_fail(FU_IS_CONTEXT(self));
-	g_return_if_fail(compile_versions != NULL);
-	priv->compile_versions = g_hash_table_ref(compile_versions);
+	g_return_val_if_fail(FU_IS_CONTEXT(self), NULL);
+	return priv->compile_versions;
+}
+
+static gint
+fu_context_udev_plugin_names_sort_cb(gconstpointer a, gconstpointer b)
+{
+	const gchar *str_a = *((const gchar **)a);
+	const gchar *str_b = *((const gchar **)b);
+	return g_strcmp0(str_a, str_b);
 }
 
 /**
  * fu_context_add_udev_subsystem:
  * @self: a #FuContext
- * @subsystem: a subsystem name, e.g. `pciport`
+ * @subsystem: a subsystem name, e.g. `pciport`, or `block:partition`
+ * @plugin_name: (nullable): a plugin name, e.g. `iommu`
  *
  * Registers the udev subsystem to be watched by the daemon.
  *
@@ -585,20 +639,101 @@ fu_context_set_compile_versions(FuContext *self, GHashTable *compile_versions)
  * Since: 1.6.0
  **/
 void
-fu_context_add_udev_subsystem(FuContext *self, const gchar *subsystem)
+fu_context_add_udev_subsystem(FuContext *self, const gchar *subsystem, const gchar *plugin_name)
 {
 	FuContextPrivate *priv = GET_PRIVATE(self);
+	GPtrArray *plugin_names;
+	g_auto(GStrv) subsystem_devtype = NULL;
 
 	g_return_if_fail(FU_IS_CONTEXT(self));
 	g_return_if_fail(subsystem != NULL);
 
-	for (guint i = 0; i < priv->udev_subsystems->len; i++) {
-		const gchar *subsystem_tmp = g_ptr_array_index(priv->udev_subsystems, i);
-		if (g_strcmp0(subsystem_tmp, subsystem) == 0)
-			return;
+	/* add the base subsystem watch if passed a subsystem:devtype */
+	subsystem_devtype = g_strsplit(subsystem, ":", 2);
+	if (g_strv_length(subsystem_devtype) > 1)
+		fu_context_add_udev_subsystem(self, subsystem_devtype[0], NULL);
+
+	/* already exists */
+	plugin_names = g_hash_table_lookup(priv->udev_subsystems, subsystem);
+	if (plugin_names != NULL) {
+		if (plugin_name != NULL) {
+			for (guint i = 0; i < plugin_names->len; i++) {
+				const gchar *tmp = g_ptr_array_index(plugin_names, i);
+				if (g_strcmp0(tmp, plugin_name) == 0)
+					return;
+			}
+			g_ptr_array_add(plugin_names, g_strdup(plugin_name));
+			g_ptr_array_sort(plugin_names, fu_context_udev_plugin_names_sort_cb);
+		}
+		return;
 	}
-	g_info("added udev subsystem watch of %s", subsystem);
-	g_ptr_array_add(priv->udev_subsystems, g_strdup(subsystem));
+
+	/* add */
+	plugin_names = g_ptr_array_new_with_free_func(g_free);
+	if (plugin_name != NULL)
+		g_ptr_array_add(plugin_names, g_strdup(plugin_name));
+	g_hash_table_insert(priv->udev_subsystems,
+			    g_strdup(subsystem),
+			    g_steal_pointer(&plugin_names));
+	if (plugin_name != NULL)
+		g_info("added udev subsystem watch of %s for plugin %s", subsystem, plugin_name);
+	else
+		g_info("added udev subsystem watch of %s", subsystem);
+}
+
+/**
+ * fu_context_get_plugin_names_for_udev_subsystem:
+ * @self: a #FuContext
+ * @subsystem: a subsystem name, e.g. `pciport`, or `block:partition`
+ * @error: (nullable): optional return location for an error
+ *
+ * Gets the plugins which registered for a specific subsystem.
+ *
+ * Returns: (transfer container) (element-type utf8): List of plugin names
+ *
+ * Since: 1.9.3
+ **/
+GPtrArray *
+fu_context_get_plugin_names_for_udev_subsystem(FuContext *self,
+					       const gchar *subsystem,
+					       GError **error)
+{
+	FuContextPrivate *priv = GET_PRIVATE(self);
+	GPtrArray *plugin_names_tmp;
+	g_auto(GStrv) subsystem_devtype = NULL;
+	g_autoptr(GPtrArray) plugin_names = g_ptr_array_new_with_free_func(g_free);
+
+	g_return_val_if_fail(FU_IS_CONTEXT(self), NULL);
+	g_return_val_if_fail(subsystem != NULL, NULL);
+
+	/* add the base subsystem first */
+	subsystem_devtype = g_strsplit(subsystem, ":", 2);
+	if (g_strv_length(subsystem_devtype) > 1) {
+		plugin_names_tmp = g_hash_table_lookup(priv->udev_subsystems, subsystem_devtype[0]);
+		if (plugin_names_tmp != NULL)
+			g_ptr_array_extend(plugin_names,
+					   plugin_names_tmp,
+					   (GCopyFunc)g_strdup,
+					   NULL);
+	}
+
+	/* add the exact match */
+	plugin_names_tmp = g_hash_table_lookup(priv->udev_subsystems, subsystem);
+	if (plugin_names_tmp != NULL)
+		g_ptr_array_extend(plugin_names, plugin_names_tmp, (GCopyFunc)g_strdup, NULL);
+
+	/* no matches */
+	if (plugin_names->len == 0) {
+		g_set_error(error,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_NOT_FOUND,
+			    "no plugins registered for %s",
+			    subsystem);
+		return NULL;
+	}
+
+	/* success */
+	return g_steal_pointer(&plugin_names);
 }
 
 /**
@@ -607,7 +742,7 @@ fu_context_add_udev_subsystem(FuContext *self, const gchar *subsystem)
  *
  * Gets the udev subsystems required by all plugins.
  *
- * Returns: (transfer none) (element-type utf8): List of subsystems
+ * Returns: (transfer container) (element-type utf8): List of subsystems
  *
  * Since: 1.6.0
  **/
@@ -615,8 +750,16 @@ GPtrArray *
 fu_context_get_udev_subsystems(FuContext *self)
 {
 	FuContextPrivate *priv = GET_PRIVATE(self);
+	g_autoptr(GList) keys = g_hash_table_get_keys(priv->udev_subsystems);
+	g_autoptr(GPtrArray) subsystems = g_ptr_array_new_with_free_func(g_free);
+
 	g_return_val_if_fail(FU_IS_CONTEXT(self), NULL);
-	return priv->udev_subsystems;
+
+	for (GList *l = keys; l != NULL; l = l->next) {
+		const gchar *subsystem = (const gchar *)l->data;
+		g_ptr_array_add(subsystems, g_strdup(subsystem));
+	}
+	return g_steal_pointer(&subsystems);
 }
 
 /**
@@ -677,7 +820,7 @@ fu_context_gtypes_sort_cb(gconstpointer a, gconstpointer b)
  *
  * Returns all the firmware #GType IDs.
  *
- * Returns: (transfer none) (element-type utf8): List of subsystems
+ * Returns: (transfer container) (element-type utf8): firmware IDs
  *
  * Since: 1.6.0
  **/
@@ -704,7 +847,7 @@ fu_context_get_firmware_gtype_ids(FuContext *self)
  *
  * Returns all the firmware #GType's.
  *
- * Returns: (transfer none) (element-type GType): Firmware types
+ * Returns: (transfer container) (element-type GType): Firmware types
  *
  * Since: 1.9.1
  **/
@@ -782,10 +925,11 @@ static void
 fu_context_lookup_quirk_by_id_iter_cb(FuQuirks *self,
 				      const gchar *key,
 				      const gchar *value,
+				      FuContextQuirkSource source,
 				      gpointer user_data)
 {
 	FuContextQuirkLookupHelper *helper = (FuContextQuirkLookupHelper *)user_data;
-	helper->iter_cb(helper->self, key, value, helper->user_data);
+	helper->iter_cb(helper->self, key, value, source, helper->user_data);
 }
 
 /**
@@ -840,10 +984,29 @@ fu_context_security_changed(FuContext *self)
 	g_signal_emit(self, signals[SIGNAL_SECURITY_CHANGED], 0);
 }
 
+/**
+ * fu_context_housekeeping:
+ * @self: a #FuContext
+ *
+ * Performs any housekeeping maintenance when the daemon is idle.
+ *
+ * Since: 2.0.0
+ **/
+void
+fu_context_housekeeping(FuContext *self)
+{
+	g_return_if_fail(FU_IS_CONTEXT(self));
+	g_signal_emit(self, signals[SIGNAL_HOUSEKEEPING], 0);
+}
+
 typedef gboolean (*FuContextHwidsSetupFunc)(FuContext *self, FuHwids *hwids, GError **error);
 
 static void
-fu_context_hwid_quirk_cb(FuContext *self, const gchar *key, const gchar *value, gpointer user_data)
+fu_context_hwid_quirk_cb(FuContext *self,
+			 const gchar *key,
+			 const gchar *value,
+			 FuContextQuirkSource source,
+			 gpointer user_data)
 {
 	FuContextPrivate *priv = GET_PRIVATE(self);
 	if (value != NULL) {
@@ -885,6 +1048,7 @@ fu_context_load_hwinfo(FuContext *self,
 			       {"fdt", FU_CONTEXT_HWID_FLAG_LOAD_FDT, fu_hwids_fdt_setup},
 			       {"kenv", FU_CONTEXT_HWID_FLAG_LOAD_KENV, fu_hwids_kenv_setup},
 			       {"dmi", FU_CONTEXT_HWID_FLAG_LOAD_DMI, fu_hwids_dmi_setup},
+			       {"darwin", FU_CONTEXT_HWID_FLAG_LOAD_DARWIN, fu_hwids_darwin_setup},
 			       {NULL, FU_CONTEXT_HWID_FLAG_NONE, NULL}};
 
 	g_return_val_if_fail(FU_IS_CONTEXT(self), FALSE);
@@ -913,7 +1077,7 @@ fu_context_load_hwinfo(FuContext *self,
 			}
 		}
 	}
-	priv->loaded_hwinfo = TRUE;
+	fu_context_add_flag(self, FU_CONTEXT_FLAG_LOADED_HWINFO);
 	fu_progress_step_done(progress);
 
 	if (!fu_hwids_setup(priv->hwids, &error_hwids))
@@ -932,7 +1096,7 @@ fu_context_load_hwinfo(FuContext *self,
 	}
 	fu_progress_step_done(progress);
 
-	fu_context_add_udev_subsystem(self, "firmware-attributes");
+	fu_context_add_udev_subsystem(self, "firmware-attributes", NULL);
 	if (!fu_context_reload_bios_settings(self, &error_bios_settings))
 		g_debug("%s", error_bios_settings->message);
 	fu_progress_step_done(progress);
@@ -1022,6 +1186,16 @@ fu_context_set_power_state(FuContext *self, FuPowerState power_state)
 {
 	FuContextPrivate *priv = GET_PRIVATE(self);
 	g_return_if_fail(FU_IS_CONTEXT(self));
+
+	/* quirk for behavior on Framework systems where the EC reports as discharging
+	 * while on AC but at 100% */
+	if (power_state == FU_POWER_STATE_BATTERY_DISCHARGING && priv->battery_level == 100 &&
+	    fu_context_has_hwid_flag(self, "discharging-when-fully-changed")) {
+		power_state = FU_POWER_STATE_AC_FULLY_CHARGED;
+		g_debug("quirking power state to %s", fu_power_state_to_string(power_state));
+	}
+
+	/* is the same */
 	if (priv->power_state == power_state)
 		return;
 	priv->power_state = power_state;
@@ -1066,6 +1240,45 @@ fu_context_set_lid_state(FuContext *self, FuLidState lid_state)
 	priv->lid_state = lid_state;
 	g_info("lid state now %s", fu_lid_state_to_string(lid_state));
 	g_object_notify(G_OBJECT(self), "lid-state");
+}
+
+/**
+ * fu_context_get_display_state:
+ * @self: a #FuContext
+ *
+ * Gets the display state, if applicable.
+ *
+ * Returns: a display state, e.g. %FU_DISPLAY_STATE_CONNECTED
+ *
+ * Since: 1.9.6
+ **/
+FuDisplayState
+fu_context_get_display_state(FuContext *self)
+{
+	FuContextPrivate *priv = GET_PRIVATE(self);
+	g_return_val_if_fail(FU_IS_CONTEXT(self), FALSE);
+	return priv->display_state;
+}
+
+/**
+ * fu_context_set_display_state:
+ * @self: a #FuContext
+ * @display_state: a display state, e.g. %FU_DISPLAY_STATE_CONNECTED
+ *
+ * Sets the display state, if applicable.
+ *
+ * Since: 1.9.6
+ **/
+void
+fu_context_set_display_state(FuContext *self, FuDisplayState display_state)
+{
+	FuContextPrivate *priv = GET_PRIVATE(self);
+	g_return_if_fail(FU_IS_CONTEXT(self));
+	if (priv->display_state == display_state)
+		return;
+	priv->display_state = display_state;
+	g_info("display-state now %s", fu_display_state_to_string(display_state));
+	g_object_notify(G_OBJECT(self), "display-state");
 }
 
 /**
@@ -1238,6 +1451,39 @@ fu_context_add_esp_volume(FuContext *self, FuVolume *volume)
 }
 
 /**
+ * fu_context_set_esp_location:
+ * @self: A #FuContext object.
+ * @location: The path to the preferred ESP.
+ *
+ * Sets the user's desired ESP (EFI System Partition) location for the given #FuContext.
+ */
+void
+fu_context_set_esp_location(FuContext *self, const gchar *location)
+{
+	FuContextPrivate *priv = GET_PRIVATE(self);
+	g_return_if_fail(FU_IS_CONTEXT(self));
+	g_return_if_fail(location != NULL);
+	g_free(priv->esp_location);
+	priv->esp_location = g_strdup(location);
+}
+
+/**
+ * fu_context_get_esp_location:
+ * @self: The FuContext object.
+ *
+ * Retrieves the user's desired ESP (EFI System Partition) location for the given #FuContext
+ *
+ * Return: The preferred ESP location as a string.
+ */
+const gchar *
+fu_context_get_esp_location(FuContext *self)
+{
+	FuContextPrivate *priv = GET_PRIVATE(self);
+	g_return_val_if_fail(FU_IS_CONTEXT(self), NULL);
+	return priv->esp_location;
+}
+
+/**
  * fu_context_get_esp_volumes:
  * @self: a #FuContext
  * @error: (nullable): optional return location for an error
@@ -1283,7 +1529,7 @@ fu_context_get_esp_volumes(FuContext *self, GError **error)
 		for (guint i = 0; i < volumes_esp->len; i++) {
 			FuVolume *vol = g_ptr_array_index(volumes_esp, i);
 			g_autofree gchar *type = fu_volume_get_id_type(vol);
-			if (g_strcmp0(type, "ext4") == 0)
+			if (g_strcmp0(type, "vfat") != 0)
 				continue;
 			fu_context_add_esp_volume(self, vol);
 		}
@@ -1307,12 +1553,549 @@ fu_context_get_esp_volumes(FuContext *self, GError **error)
 
 	/* nothing found */
 	if (priv->esp_volumes->len == 0) {
-		g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND, "No ESP or BDP found");
+		g_autoptr(GPtrArray) devices = NULL;
+
+		/* check if udisks2 is working */
+		devices = fu_common_get_block_devices(error);
+		if (devices == NULL)
+			return NULL;
+		g_set_error_literal(error,
+				    FWUPD_ERROR,
+				    FWUPD_ERROR_NOT_FOUND,
+				    "No ESP or BDP found");
 		return NULL;
 	}
 
 	/* success */
 	return g_ptr_array_ref(priv->esp_volumes);
+}
+
+static gboolean
+fu_context_is_esp_linux(FuVolume *esp, GError **error)
+{
+	const gchar *prefixes[] = {"grub", "shim", "systemd-boot", "zfsbootmenu", NULL};
+	g_autofree gchar *prefixes_str = NULL;
+	g_autofree gchar *mount_point = fu_volume_get_mount_point(esp);
+	g_autoptr(GPtrArray) files = NULL;
+
+	/* look for any likely basenames */
+	if (mount_point == NULL) {
+		g_set_error_literal(error,
+				    FWUPD_ERROR,
+				    FWUPD_ERROR_NOT_SUPPORTED,
+				    "no mountpoint for ESP");
+		return FALSE;
+	}
+	files = fu_path_get_files(mount_point, error);
+	if (files == NULL)
+		return FALSE;
+	for (guint i = 0; i < files->len; i++) {
+		const gchar *fn = g_ptr_array_index(files, i);
+		g_autofree gchar *basename = g_path_get_basename(fn);
+		g_autofree gchar *basename_lower = g_utf8_strdown(basename, -1);
+
+		for (guint j = 0; prefixes[j] != NULL; j++) {
+			if (!g_str_has_prefix(basename_lower, prefixes[j]))
+				continue;
+			if (!g_str_has_suffix(basename_lower, ".efi"))
+				continue;
+			g_info("found %s which indicates a Linux ESP, using %s", fn, mount_point);
+			return TRUE;
+		}
+	}
+
+	/* failed */
+	prefixes_str = g_strjoinv("|", (gchar **)prefixes);
+	g_set_error(error,
+		    FWUPD_ERROR,
+		    FWUPD_ERROR_NOT_FOUND,
+		    "did not any files with prefix %s in %s",
+		    prefixes_str,
+		    mount_point);
+	return FALSE;
+}
+
+static gint
+fu_context_sort_esp_score_cb(gconstpointer a, gconstpointer b, gpointer user_data)
+{
+	GHashTable *esp_scores = (GHashTable *)user_data;
+	guint esp1_score = GPOINTER_TO_UINT(g_hash_table_lookup(esp_scores, *((FuVolume **)a)));
+	guint esp2_score = GPOINTER_TO_UINT(g_hash_table_lookup(esp_scores, *((FuVolume **)b)));
+	if (esp1_score < esp2_score)
+		return 1;
+	if (esp1_score > esp2_score)
+		return -1;
+	return 0;
+}
+
+/**
+ * fu_context_get_default_esp:
+ * @self: a #FuContext
+ * @error: (nullable): optional return location for an error
+ *
+ * Finds the volume that represents the ESP that plugins should nominally
+ * use for accessing storing data.
+ *
+ * Returns: (transfer full): a volume, or %NULL if no ESP was found
+ *
+ * Since: 2.0.0
+ **/
+FuVolume *
+fu_context_get_default_esp(FuContext *self, GError **error)
+{
+	FuContextPrivate *priv = GET_PRIVATE(self);
+	g_autoptr(GPtrArray) esp_volumes = NULL;
+	const gchar *user_esp_location = fu_context_get_esp_location(self);
+
+	/* show which volumes we're choosing from */
+	esp_volumes = fu_context_get_esp_volumes(self, error);
+	if (esp_volumes == NULL)
+		return NULL;
+
+	/* no mounting */
+	if (priv->flags & FU_CONTEXT_FLAG_INHIBIT_VOLUME_MOUNT) {
+		g_set_error_literal(error,
+				    FWUPD_ERROR,
+				    FWUPD_ERROR_NOT_SUPPORTED,
+				    "cannot mount volume by policy");
+		return NULL;
+	}
+
+	/* we found more than one: lets look for the best one */
+	if (esp_volumes->len > 1) {
+		g_autoptr(GString) str = g_string_new("more than one ESP possible:");
+		g_autoptr(GHashTable) esp_scores = g_hash_table_new(g_direct_hash, g_direct_equal);
+		for (guint i = 0; i < esp_volumes->len; i++) {
+			FuVolume *esp = g_ptr_array_index(esp_volumes, i);
+			guint score = 0;
+			g_autofree gchar *kind = NULL;
+			g_autoptr(FuDeviceLocker) locker = NULL;
+			g_autoptr(GError) error_local = NULL;
+
+			/* ignore the volume completely if we cannot mount it */
+			locker = fu_volume_locker(esp, &error_local);
+			if (locker == NULL) {
+				g_warning("failed to mount ESP: %s", error_local->message);
+				continue;
+			}
+
+			/* if user specified, make sure that it matches */
+			if (user_esp_location != NULL) {
+				g_autofree gchar *mount = fu_volume_get_mount_point(esp);
+				if (g_strcmp0(mount, user_esp_location) != 0) {
+					g_debug("skipping %s as it's not the user "
+						"specified ESP",
+						mount);
+					continue;
+				}
+			}
+
+			/* big partitions are better than small partitions */
+			score += fu_volume_get_size(esp) / (1024 * 1024);
+
+			/* prefer partitions with the ESP flag set over msftdata */
+			kind = fu_volume_get_partition_kind(esp);
+			if (g_strcmp0(kind, FU_VOLUME_KIND_ESP) == 0)
+				score += 0x20000;
+
+			/* prefer linux ESP */
+			if (!fu_context_is_esp_linux(esp, &error_local)) {
+				g_debug("not a Linux ESP: %s", error_local->message);
+			} else {
+				score += 0x10000;
+			}
+			g_hash_table_insert(esp_scores, (gpointer)esp, GUINT_TO_POINTER(score));
+		}
+
+		if (g_hash_table_size(esp_scores) == 0) {
+			g_set_error(error,
+				    FWUPD_ERROR,
+				    FWUPD_ERROR_NOT_SUPPORTED,
+				    "no EFI system partition found");
+			return NULL;
+		}
+
+		g_ptr_array_sort_with_data(esp_volumes, fu_context_sort_esp_score_cb, esp_scores);
+		for (guint i = 0; i < esp_volumes->len; i++) {
+			FuVolume *esp = g_ptr_array_index(esp_volumes, i);
+			guint score = GPOINTER_TO_UINT(g_hash_table_lookup(esp_scores, esp));
+			g_string_append_printf(str, "\n - 0x%x:\t%s", score, fu_volume_get_id(esp));
+		}
+		g_debug("%s", str->str);
+	}
+
+	if (esp_volumes->len == 1) {
+		FuVolume *esp = g_ptr_array_index(esp_volumes, 0);
+		g_autoptr(FuDeviceLocker) locker = NULL;
+
+		/* ensure it can be mounted */
+		locker = fu_volume_locker(esp, error);
+		if (locker == NULL)
+			return NULL;
+
+		/* if user specified, does it match mountpoints ? */
+		if (user_esp_location != NULL) {
+			g_autofree gchar *mount = fu_volume_get_mount_point(esp);
+
+			if (g_strcmp0(mount, user_esp_location) != 0) {
+				g_set_error(error,
+					    FWUPD_ERROR,
+					    FWUPD_ERROR_NOT_SUPPORTED,
+					    "user specified ESP %s not found",
+					    user_esp_location);
+				return NULL;
+			}
+		}
+	}
+
+	/* "success" */
+	return g_object_ref(g_ptr_array_index(esp_volumes, 0));
+}
+
+/**
+ * fu_context_get_esp_volume_by_hard_drive_device_path:
+ * @self: a #FuContext
+ * @dp: a #FuEfiHardDriveDevicePath
+ * @error: (nullable): optional return location for an error
+ *
+ * Gets a volume that matches the EFI device path
+ *
+ * Returns: (transfer full): a volume, or %NULL if it was not found
+ *
+ * Since: 2.0.0
+ **/
+FuVolume *
+fu_context_get_esp_volume_by_hard_drive_device_path(FuContext *self,
+						    FuEfiHardDriveDevicePath *dp,
+						    GError **error)
+{
+	g_autoptr(GPtrArray) volumes = NULL;
+
+	g_return_val_if_fail(FU_IS_CONTEXT(self), NULL);
+	g_return_val_if_fail(FU_IS_EFI_HARD_DRIVE_DEVICE_PATH(dp), NULL);
+	g_return_val_if_fail(error == NULL || *error == NULL, NULL);
+
+	volumes = fu_context_get_esp_volumes(self, error);
+	if (volumes == NULL)
+		return NULL;
+	for (guint i = 0; i < volumes->len; i++) {
+		FuVolume *volume = g_ptr_array_index(volumes, i);
+		g_autoptr(GError) error_local = NULL;
+		g_autoptr(FuEfiHardDriveDevicePath) dp_tmp = NULL;
+
+		dp_tmp = fu_efi_hard_drive_device_path_new_from_volume(volume, &error_local);
+		if (dp_tmp == NULL) {
+			g_debug("%s", error_local->message);
+			continue;
+		}
+		if (!fu_efi_hard_drive_device_path_compare(dp, dp_tmp))
+			continue;
+		return g_object_ref(volume);
+	}
+
+	/* failed */
+	g_set_error(error, FWUPD_ERROR, FWUPD_ERROR_NOT_FOUND, "could not find EFI DP");
+	return NULL;
+}
+
+static FuFirmware *
+fu_context_esp_load_pe_file(const gchar *filename, GError **error)
+{
+	g_autoptr(FuFirmware) firmware = fu_pefile_firmware_new();
+	g_autoptr(GFile) file = g_file_new_for_path(filename);
+	fu_firmware_set_filename(firmware, filename);
+	if (!fu_firmware_parse_file(firmware, file, FWUPD_INSTALL_FLAG_NONE, error)) {
+		g_prefix_error(error, "failed to load %s: ", filename);
+		return NULL;
+	}
+	return g_steal_pointer(&firmware);
+}
+
+static gchar *
+fu_context_build_uefi_basename_for_arch(const gchar *app_name)
+{
+#if defined(__x86_64__)
+	return g_strdup_printf("%sx64.efi", app_name);
+#endif
+#if defined(__aarch64__)
+	return g_strdup_printf("%saa64.efi", app_name);
+#endif
+#if defined(__loongarch_lp64)
+	return g_strdup_printf("%sloongarch64.efi", app_name);
+#endif
+#if (defined(__riscv) && __riscv_xlen == 64)
+	return g_strdup_printf("%sriscv64.efi", app_name);
+#endif
+#if defined(__i386__) || defined(__i686__)
+	return g_strdup_printf("%sia32.efi", app_name);
+#endif
+#if defined(__arm__)
+	return g_strdup_printf("%sarm.efi", app_name);
+#endif
+	return NULL;
+}
+
+static gboolean
+fu_context_get_esp_files_for_entry(FuContext *self,
+				   FuEfiLoadOption *entry,
+				   GPtrArray *files,
+				   FuContextEspFileFlags flags,
+				   GError **error)
+{
+	FuContextPrivate *priv = GET_PRIVATE(self);
+	g_autofree gchar *dp_filename = NULL;
+	g_autofree gchar *filename = NULL;
+	g_autofree gchar *mount_point = NULL;
+	g_autofree gchar *shim_name = fu_context_build_uefi_basename_for_arch("shim");
+	g_autoptr(FuDeviceLocker) volume_locker = NULL;
+	g_autoptr(FuEfiFilePathDevicePath) dp_path = NULL;
+	g_autoptr(FuEfiHardDriveDevicePath) dp_hdd = NULL;
+	g_autoptr(FuFirmware) dp_list = NULL;
+	g_autoptr(FuVolume) volume = NULL;
+
+	/* all entries should have a list */
+	dp_list =
+	    fu_firmware_get_image_by_gtype(FU_FIRMWARE(entry), FU_TYPE_EFI_DEVICE_PATH_LIST, NULL);
+	if (dp_list == NULL)
+		return TRUE;
+
+	/* HDD */
+	dp_hdd = FU_EFI_HARD_DRIVE_DEVICE_PATH(
+	    fu_firmware_get_image_by_gtype(FU_FIRMWARE(dp_list),
+					   FU_TYPE_EFI_HARD_DRIVE_DEVICE_PATH,
+					   NULL));
+	if (dp_hdd == NULL)
+		return TRUE;
+
+	/* FILE */
+	dp_path = FU_EFI_FILE_PATH_DEVICE_PATH(
+	    fu_firmware_get_image_by_gtype(FU_FIRMWARE(dp_list),
+					   FU_TYPE_EFI_FILE_PATH_DEVICE_PATH,
+					   NULL));
+	if (dp_path == NULL)
+		return TRUE;
+
+	/* can we match the volume? */
+	volume = fu_context_get_esp_volume_by_hard_drive_device_path(self, dp_hdd, error);
+	if (volume == NULL)
+		return FALSE;
+	if (priv->flags & FU_CONTEXT_FLAG_INHIBIT_VOLUME_MOUNT) {
+		g_set_error_literal(error,
+				    FWUPD_ERROR,
+				    FWUPD_ERROR_NOT_SUPPORTED,
+				    "cannot mount volume by policy");
+		return FALSE;
+	}
+	volume_locker = fu_volume_locker(volume, error);
+	if (volume_locker == NULL)
+		return FALSE;
+	dp_filename = fu_efi_file_path_device_path_get_name(dp_path, error);
+	if (dp_filename == NULL)
+		return FALSE;
+
+	/* the file itself */
+	mount_point = fu_volume_get_mount_point(volume);
+	filename = g_build_filename(mount_point, dp_filename, NULL);
+	g_debug("check for 1st stage bootloader: %s", filename);
+	if (flags & FU_CONTEXT_ESP_FILE_FLAG_INCLUDE_FIRST_STAGE) {
+		g_autoptr(FuFirmware) firmware = fu_context_esp_load_pe_file(filename, error);
+		if (firmware == NULL)
+			return FALSE;
+		fu_firmware_set_idx(firmware, fu_firmware_get_idx(FU_FIRMWARE(entry)));
+		g_ptr_array_add(files, g_steal_pointer(&firmware));
+	}
+
+	/* the 2nd stage bootloader, typically grub */
+	if (flags & FU_CONTEXT_ESP_FILE_FLAG_INCLUDE_SECOND_STAGE &&
+	    g_str_has_suffix(filename, shim_name)) {
+		g_autoptr(GString) filename2 = g_string_new(filename);
+		const gchar *path;
+
+		path =
+		    fu_efi_load_option_get_metadata(entry, FU_EFI_LOAD_OPTION_METADATA_PATH, NULL);
+		if (path != NULL) {
+			g_string_replace(filename2, shim_name, path, 1);
+		} else {
+			g_autofree gchar *grub_name =
+			    fu_context_build_uefi_basename_for_arch("grub");
+			g_string_replace(filename2, shim_name, grub_name, 1);
+		}
+		g_debug("check for 2nd stage bootloader: %s", filename2->str);
+		if (g_file_test(filename2->str, G_FILE_TEST_IS_REGULAR)) {
+			g_autoptr(FuFirmware) firmware =
+			    fu_context_esp_load_pe_file(filename2->str, error);
+			if (firmware == NULL)
+				return FALSE;
+			fu_firmware_set_idx(firmware, fu_firmware_get_idx(FU_FIRMWARE(entry)));
+			g_ptr_array_add(files, g_steal_pointer(&firmware));
+		}
+	}
+
+	/* revocations, typically for SBAT */
+	if (flags & FU_CONTEXT_ESP_FILE_FLAG_INCLUDE_REVOCATIONS &&
+	    g_str_has_suffix(filename, shim_name)) {
+		g_autoptr(GString) filename2 = g_string_new(filename);
+		g_string_replace(filename2, shim_name, "revocations.efi", 1);
+		g_debug("check for revocation: %s", filename2->str);
+		if (g_file_test(filename2->str, G_FILE_TEST_EXISTS)) {
+			g_autoptr(FuFirmware) firmware =
+			    fu_context_esp_load_pe_file(filename2->str, error);
+			if (firmware == NULL)
+				return FALSE;
+			fu_firmware_set_idx(firmware, fu_firmware_get_idx(FU_FIRMWARE(entry)));
+			g_ptr_array_add(files, g_steal_pointer(&firmware));
+		}
+	}
+
+	/* success */
+	return TRUE;
+}
+
+/**
+ * fu_context_get_esp_files:
+ * @self: a #FuContext
+ * @flags: some #FuContextEspFileFlags, e.g. #FU_CONTEXT_ESP_FILE_FLAG_INCLUDE_FIRST_STAGE
+ * @error: #GError
+ *
+ * Gets the PE files for all the entries listed in `BootOrder`.
+ *
+ * Returns: (transfer full) (element-type FuPefileFirmware): PE firmware data
+ *
+ * Since: 2.0.0
+ **/
+GPtrArray *
+fu_context_get_esp_files(FuContext *self, FuContextEspFileFlags flags, GError **error)
+{
+	FuContextPrivate *priv = GET_PRIVATE(self);
+	g_autoptr(GPtrArray) entries = NULL;
+	g_autoptr(GPtrArray) files = g_ptr_array_new_with_free_func((GDestroyNotify)g_object_unref);
+
+	g_return_val_if_fail(FU_IS_CONTEXT(self), NULL);
+	g_return_val_if_fail(error == NULL || *error == NULL, NULL);
+
+	entries = fu_efivars_get_boot_entries(priv->efivars, error);
+	if (entries == NULL)
+		return NULL;
+	for (guint i = 0; i < entries->len; i++) {
+		FuEfiLoadOption *entry = g_ptr_array_index(entries, i);
+		g_autoptr(GError) error_local = NULL;
+		if (!fu_context_get_esp_files_for_entry(self, entry, files, flags, &error_local)) {
+			if (g_error_matches(error_local, FWUPD_ERROR, FWUPD_ERROR_NOT_FOUND)) {
+				g_debug("ignoring %s: %s",
+					fu_firmware_get_id(FU_FIRMWARE(entry)),
+					error_local->message);
+				continue;
+			}
+			g_propagate_error(error, g_steal_pointer(&error_local));
+			return NULL;
+		}
+	}
+
+	/* success */
+	return g_steal_pointer(&files);
+}
+
+/**
+ * fu_context_get_backends:
+ * @self: a #FuContext
+ *
+ * Gets all the possible backends used by all plugins.
+ *
+ * Returns: (transfer none) (element-type FuBackend): List of backends
+ *
+ * Since: 2.0.0
+ **/
+GPtrArray *
+fu_context_get_backends(FuContext *self)
+{
+	FuContextPrivate *priv = GET_PRIVATE(self);
+	g_return_val_if_fail(FU_IS_CONTEXT(self), NULL);
+	return priv->backends;
+}
+
+/**
+ * fu_context_add_backend:
+ * @self: a #FuContext
+ * @backend: a #FuBackend
+ *
+ * Adds a backend to the context.
+ *
+ * Returns: (transfer full): a #FuBackend, or %NULL on error
+ *
+ * Since: 2.0.0
+ **/
+void
+fu_context_add_backend(FuContext *self, FuBackend *backend)
+{
+	FuContextPrivate *priv = GET_PRIVATE(self);
+	g_return_if_fail(FU_IS_CONTEXT(self));
+	g_return_if_fail(FU_IS_BACKEND(backend));
+	g_ptr_array_add(priv->backends, g_object_ref(backend));
+}
+
+/**
+ * fu_context_get_backend_by_name:
+ * @self: a #FuContext
+ * @name: backend name, e.g. `udev` or `bluez`
+ * @error: (nullable): optional return location for an error
+ *
+ * Gets a specific backend added to the context.
+ *
+ * Returns: (transfer full): a #FuBackend, or %NULL on error
+ *
+ * Since: 2.0.0
+ **/
+FuBackend *
+fu_context_get_backend_by_name(FuContext *self, const gchar *name, GError **error)
+{
+	FuContextPrivate *priv = GET_PRIVATE(self);
+
+	g_return_val_if_fail(FU_IS_CONTEXT(self), NULL);
+	g_return_val_if_fail(name != NULL, NULL);
+	g_return_val_if_fail(error == NULL || *error == NULL, NULL);
+
+	for (guint i = 0; i < priv->backends->len; i++) {
+		FuBackend *backend = g_ptr_array_index(priv->backends, i);
+		if (g_strcmp0(fu_backend_get_name(backend), name) == 0)
+			return g_object_ref(backend);
+	}
+	g_set_error(error, FWUPD_ERROR, FWUPD_ERROR_NOT_FOUND, "no backend with name %s", name);
+	return NULL;
+}
+
+/* private */
+gboolean
+fu_context_has_backend(FuContext *self, const gchar *name)
+{
+	FuContextPrivate *priv = GET_PRIVATE(self);
+
+	g_return_val_if_fail(FU_IS_CONTEXT(self), FALSE);
+	g_return_val_if_fail(name != NULL, FALSE);
+
+	for (guint i = 0; i < priv->backends->len; i++) {
+		FuBackend *backend = g_ptr_array_index(priv->backends, i);
+		if (g_strcmp0(fu_backend_get_name(backend), name) == 0)
+			return TRUE;
+	}
+	return FALSE;
+}
+
+/* private */
+gpointer
+fu_context_get_data(FuContext *self, const gchar *key)
+{
+	g_return_val_if_fail(FU_IS_CONTEXT(self), NULL);
+	g_return_val_if_fail(key != NULL, NULL);
+	return g_object_get_data(G_OBJECT(self), key);
+}
+
+/* private */
+void
+fu_context_set_data(FuContext *self, const gchar *key, gpointer data)
+{
+	g_return_if_fail(FU_IS_CONTEXT(self));
+	g_return_if_fail(key != NULL);
+	g_object_set_data(G_OBJECT(self), key, data);
 }
 
 static void
@@ -1326,6 +2109,9 @@ fu_context_get_property(GObject *object, guint prop_id, GValue *value, GParamSpe
 		break;
 	case PROP_LID_STATE:
 		g_value_set_uint(value, priv->lid_state);
+		break;
+	case PROP_DISPLAY_STATE:
+		g_value_set_uint(value, priv->display_state);
 		break;
 	case PROP_BATTERY_LEVEL:
 		g_value_set_uint(value, priv->battery_level);
@@ -1354,6 +2140,9 @@ fu_context_set_property(GObject *object, guint prop_id, const GValue *value, GPa
 	case PROP_LID_STATE:
 		fu_context_set_lid_state(self, g_value_get_uint(value));
 		break;
+	case PROP_DISPLAY_STATE:
+		fu_context_set_display_state(self, g_value_get_uint(value));
+		break;
 	case PROP_BATTERY_LEVEL:
 		fu_context_set_battery_level(self, g_value_get_uint(value));
 		break;
@@ -1370,17 +2159,27 @@ fu_context_set_property(GObject *object, guint prop_id, const GValue *value, GPa
 }
 
 static void
+fu_context_dispose(GObject *object)
+{
+	FuContext *self = FU_CONTEXT(object);
+	FuContextPrivate *priv = GET_PRIVATE(self);
+	g_ptr_array_set_size(priv->backends, 0);
+	G_OBJECT_CLASS(fu_context_parent_class)->dispose(object);
+}
+
+static void
 fu_context_finalize(GObject *object)
 {
 	FuContext *self = FU_CONTEXT(object);
 	FuContextPrivate *priv = GET_PRIVATE(self);
 
-	if (priv->runtime_versions != NULL)
-		g_hash_table_unref(priv->runtime_versions);
-	if (priv->compile_versions != NULL)
-		g_hash_table_unref(priv->compile_versions);
 	if (priv->fdt != NULL)
 		g_object_unref(priv->fdt);
+	if (priv->efivars != NULL)
+		g_object_unref(priv->efivars);
+	g_free(priv->esp_location);
+	g_hash_table_unref(priv->runtime_versions);
+	g_hash_table_unref(priv->compile_versions);
 	g_object_unref(priv->hwids);
 	g_object_unref(priv->config);
 	g_hash_table_unref(priv->hwid_flags);
@@ -1388,8 +2187,9 @@ fu_context_finalize(GObject *object)
 	g_object_unref(priv->smbios);
 	g_object_unref(priv->host_bios_settings);
 	g_hash_table_unref(priv->firmware_gtypes);
-	g_ptr_array_unref(priv->udev_subsystems);
+	g_hash_table_unref(priv->udev_subsystems);
 	g_ptr_array_unref(priv->esp_volumes);
+	g_ptr_array_unref(priv->backends);
 
 	G_OBJECT_CLASS(fu_context_parent_class)->finalize(object);
 }
@@ -1400,6 +2200,7 @@ fu_context_class_init(FuContextClass *klass)
 	GObjectClass *object_class = G_OBJECT_CLASS(klass);
 	GParamSpec *pspec;
 
+	object_class->dispose = fu_context_dispose;
 	object_class->get_property = fu_context_get_property;
 	object_class->set_property = fu_context_set_property;
 
@@ -1434,6 +2235,22 @@ fu_context_class_init(FuContextClass *klass)
 				  FU_LID_STATE_UNKNOWN,
 				  G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
 	g_object_class_install_property(object_class, PROP_LID_STATE, pspec);
+
+	/**
+	 * FuContext:display-state:
+	 *
+	 * The display state.
+	 *
+	 * Since: 1.9.6
+	 */
+	pspec = g_param_spec_uint("display-state",
+				  NULL,
+				  NULL,
+				  FU_DISPLAY_STATE_UNKNOWN,
+				  FU_DISPLAY_STATE_LAST,
+				  FU_DISPLAY_STATE_UNKNOWN,
+				  G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
+	g_object_class_install_property(object_class, PROP_DISPLAY_STATE, pspec);
 
 	/**
 	 * FuContext:battery-level:
@@ -1502,6 +2319,24 @@ fu_context_class_init(FuContextClass *klass)
 			 g_cclosure_marshal_VOID__VOID,
 			 G_TYPE_NONE,
 			 0);
+	/**
+	 * FuContext::housekeeping:
+	 * @self: the #FuContext instance that emitted the signal
+	 *
+	 * The ::housekeeping signal is emitted when helper objects should do house-keeping actions
+	 * when the daemon is idle.
+	 *
+	 * Since: 2.0.0
+	 **/
+	signals[SIGNAL_HOUSEKEEPING] = g_signal_new("housekeeping",
+						    G_TYPE_FROM_CLASS(object_class),
+						    G_SIGNAL_RUN_LAST,
+						    G_STRUCT_OFFSET(FuContextClass, housekeeping),
+						    NULL,
+						    NULL,
+						    g_cclosure_marshal_VOID__VOID,
+						    G_TYPE_NONE,
+						    0);
 
 	object_class->finalize = fu_context_finalize;
 }
@@ -1516,12 +2351,20 @@ fu_context_init(FuContext *self)
 	priv->smbios = fu_smbios_new();
 	priv->hwids = fu_hwids_new();
 	priv->config = fu_config_new();
+	priv->efivars = g_strcmp0(g_getenv("FWUPD_EFIVARS"), "dummy") == 0 ? fu_dummy_efivars_new()
+									   : fu_efivars_new();
 	priv->hwid_flags = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
-	priv->udev_subsystems = g_ptr_array_new_with_free_func(g_free);
+	priv->udev_subsystems = g_hash_table_new_full(g_str_hash,
+						      g_str_equal,
+						      g_free,
+						      (GDestroyNotify)g_ptr_array_unref);
 	priv->firmware_gtypes = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
-	priv->quirks = fu_quirks_new();
+	priv->quirks = fu_quirks_new(self);
 	priv->host_bios_settings = fu_bios_settings_new();
 	priv->esp_volumes = g_ptr_array_new_with_free_func((GDestroyNotify)g_object_unref);
+	priv->runtime_versions = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+	priv->compile_versions = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+	priv->backends = g_ptr_array_new_with_free_func((GDestroyNotify)g_object_unref);
 }
 
 /**

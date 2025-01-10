@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2020 Richard Hughes <richard@hughsie.com>
+ * Copyright 2020 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #include "config.h"
@@ -72,6 +72,7 @@ fu_linux_swap_plugin_add_security_attrs(FuPlugin *plugin, FuSecurityAttrs *attrs
 	/* create attr */
 	attr = fu_plugin_security_attr_new(plugin, FWUPD_SECURITY_ATTR_ID_KERNEL_SWAP);
 	fwupd_security_attr_add_flag(attr, FWUPD_SECURITY_ATTR_FLAG_RUNTIME_ISSUE);
+	fwupd_security_attr_set_result_success(attr, FWUPD_SECURITY_ATTR_RESULT_ENCRYPTED);
 	fu_security_attrs_append(attrs, attr);
 
 	/* load list of swaps */
@@ -91,8 +92,8 @@ fu_linux_swap_plugin_add_security_attrs(FuPlugin *plugin, FuSecurityAttrs *attrs
 
 	/* none configured */
 	if (!fu_linux_swap_get_enabled(swap)) {
-		fwupd_security_attr_add_flag(attr, FWUPD_SECURITY_ATTR_FLAG_SUCCESS);
 		fwupd_security_attr_set_result(attr, FWUPD_SECURITY_ATTR_RESULT_NOT_ENABLED);
+		fwupd_security_attr_add_flag(attr, FWUPD_SECURITY_ATTR_FLAG_SUCCESS);
 		return;
 	}
 
@@ -105,7 +106,6 @@ fu_linux_swap_plugin_add_security_attrs(FuPlugin *plugin, FuSecurityAttrs *attrs
 
 	/* success */
 	fwupd_security_attr_add_flag(attr, FWUPD_SECURITY_ATTR_FLAG_SUCCESS);
-	fwupd_security_attr_set_result(attr, FWUPD_SECURITY_ATTR_RESULT_ENCRYPTED);
 }
 
 static void
@@ -114,7 +114,7 @@ fu_linux_swap_plugin_init(FuLinuxSwapPlugin *self)
 }
 
 static void
-fu_linux_swap_finalize(GObject *obj)
+fu_linux_swap_plugin_finalize(GObject *obj)
 {
 	FuLinuxSwapPlugin *self = FU_LINUX_SWAP_PLUGIN(obj);
 	if (self->file != NULL)
@@ -132,7 +132,7 @@ fu_linux_swap_plugin_class_init(FuLinuxSwapPluginClass *klass)
 	FuPluginClass *plugin_class = FU_PLUGIN_CLASS(klass);
 	GObjectClass *object_class = G_OBJECT_CLASS(klass);
 
-	object_class->finalize = fu_linux_swap_finalize;
+	object_class->finalize = fu_linux_swap_plugin_finalize;
 	plugin_class->startup = fu_linux_swap_plugin_startup;
 	plugin_class->add_security_attrs = fu_linux_swap_plugin_add_security_attrs;
 }

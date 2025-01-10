@@ -1,8 +1,13 @@
 if get_option('plugin_intel_me').disable_auto_if(host_machine.system() != 'linux').allowed()
 cargs = ['-DG_LOG_DOMAIN="FuPluginIntelMe"']
+plugins += {meson.current_source_dir().split('/')[-1]: true}
 
 plugin_quirks += files('intel-me.quirk')
 plugin_builtins += static_library('fu_plugin_intel_me',
+  rustgen.process(
+    'fu-intel-me-amt.rs',
+    'fu-intel-me-mkhi.rs',
+  ),
   sources: [
     'fu-intel-me-common.c',
     'fu-intel-me-plugin.c',

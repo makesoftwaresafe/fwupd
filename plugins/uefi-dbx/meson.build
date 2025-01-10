@@ -1,14 +1,12 @@
-if efiboot.found() and efivar.found()
 cargs = ['-DG_LOG_DOMAIN="FuPluginUefiDbx"']
+plugins += {meson.current_source_dir().split('/')[-1]: true}
 
 plugin_quirks += files('uefi-dbx.quirk')
 plugin_builtin_uefi_dbx = static_library('fu_plugin_uefi_dbx',
-  rustgen.process('fu-efi-image.rs'),
   sources: [
     'fu-uefi-dbx-plugin.c',
     'fu-uefi-dbx-common.c',
     'fu-uefi-dbx-device.c',
-    'fu-efi-image.c',
   ],
   include_directories: plugin_incdirs,
   link_with: plugin_libs,
@@ -21,6 +19,7 @@ if get_option('tests')
   env = environment()
   env.set('G_TEST_SRCDIR', meson.current_source_dir())
   env.set('G_TEST_BUILDDIR', meson.current_build_dir())
+  env.set('G_DEBUG', 'fatal-criticals')
   e = executable(
     'uefi-dbx-self-test',
     sources: [
@@ -72,4 +71,15 @@ if get_option('man')
     install_dir: join_paths(mandir, 'man1'),
   )
 endif
+if build_docs
+  md_targets += custom_target('dbxtool.md',
+    input: 'dbxtool.md',
+    output: 'dbxtool.md',
+    command: [
+      generate_man, '@INPUT@', '-o', '@OUTPUT@',
+      '--replace', 'PACKAGE_VERSION', fwupd_version,
+      '--md',
+    ],
+  )
+  man_md += ['"dbxtool.md"']
 endif

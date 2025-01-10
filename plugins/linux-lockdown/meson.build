@@ -1,7 +1,9 @@
-if hsi
+if host_machine.system() == 'linux' and hsi
 cargs = ['-DG_LOG_DOMAIN="FuPluginLinuxLockdown"']
+plugins += {meson.current_source_dir().split('/')[-1]: true}
 
 plugin_builtins += static_library('fu_plugin_linux_lockdown',
+  rustgen.process('fu-linux-lockdown.rs'),
   sources: [
     'fu-linux-lockdown-plugin.c',
   ],

@@ -1,21 +1,17 @@
 /*
- * Copyright (C) 2021 Jarvis Jiang <jarvis.w.jiang@gmail.com>
+ * Copyright 2021 Jarvis Jiang <jarvis.w.jiang@gmail.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #include "config.h"
-
-#include <fwupdplugin.h>
 
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
 
 #include "fu-mbim-qdu-updater.h"
-#include "fu-mm-utils.h"
 
-#if MBIM_CHECK_VERSION(1, 25, 3)
 #define FU_MBIM_QDU_MAX_OPEN_ATTEMPTS 8
 
 struct _FuMbimQduUpdater {
@@ -43,7 +39,13 @@ fu_mbim_qdu_updater_mbim_device_open_ready(GObject *mbim_device,
 {
 	OpenContext *ctx = (OpenContext *)user_data;
 
-	g_assert(ctx->open_attempts > 0);
+	if (ctx->open_attempts == 0) {
+		g_set_error_literal(&ctx->error,
+				    FWUPD_ERROR,
+				    FWUPD_ERROR_INTERNAL,
+				    "no open attempts");
+		return;
+	}
 
 	if (!mbim_device_open_full_finish(MBIM_DEVICE(mbim_device), res, &ctx->error)) {
 		ctx->open_attempts--;
@@ -264,7 +266,7 @@ typedef struct {
 	GError *error;
 	GBytes *blob;
 	GArray *digest;
-	GPtrArray *chunks;
+	FuChunkArray *chunks;
 	guint chunk_sent;
 	FuDevice *device;
 	FuProgress *progress;
@@ -281,14 +283,14 @@ fu_mbim_qdu_updater_file_write_ready(MbimDevice *device, GAsyncResult *res, gpoi
 							   MBIM_MESSAGE_TYPE_COMMAND_DONE,
 							   &ctx->error)) {
 		g_debug("operation failed: %s", ctx->error->message);
-		g_ptr_array_unref(ctx->chunks);
+		g_object_unref(ctx->chunks);
 		g_main_loop_quit(ctx->mainloop);
 		return;
 	}
 
 	if (!mbim_message_qdu_file_write_response_parse(response, &ctx->error)) {
 		g_debug("couldn't parse response message: %s", ctx->error->message);
-		g_ptr_array_unref(ctx->chunks);
+		g_object_unref(ctx->chunks);
 		g_main_loop_quit(ctx->mainloop);
 		return;
 	}
@@ -296,23 +298,31 @@ fu_mbim_qdu_updater_file_write_ready(MbimDevice *device, GAsyncResult *res, gpoi
 	ctx->chunk_sent++;
 	fu_progress_set_percentage_full(ctx->progress,
 					(gsize)ctx->chunk_sent,
-					(gsize)ctx->chunks->len);
-	if (ctx->chunk_sent < ctx->chunks->len) {
-		FuChunk *chk = g_ptr_array_index(ctx->chunks, ctx->chunk_sent);
-		g_autoptr(MbimMessage) request =
+					(gsize)fu_chunk_array_length(ctx->chunks));
+	if (ctx->chunk_sent < fu_chunk_array_length(ctx->chunks)) {
+		g_autoptr(FuChunk) chk = NULL;
+		g_autoptr(MbimMessage) request = NULL;
+
+		/* prepare chunk */
+		chk = fu_chunk_array_index(ctx->chunks, ctx->chunk_sent, &ctx->error);
+		if (chk == NULL) {
+			g_main_loop_quit(ctx->mainloop);
+			return;
+		}
+		request =
 		    mbim_message_qdu_file_write_set_new(fu_chunk_get_data_sz(chk),
 							(const guint8 *)fu_chunk_get_data(chk),
 							NULL);
 		mbim_device_command(ctx->mbim_device,
 				    request,
-				    10,
+				    20,
 				    NULL,
 				    (GAsyncReadyCallback)fu_mbim_qdu_updater_file_write_ready,
 				    ctx);
 		return;
 	}
 
-	g_ptr_array_unref(ctx->chunks);
+	g_object_unref(ctx->chunks);
 	g_main_loop_quit(ctx->mainloop);
 }
 
@@ -321,7 +331,7 @@ fu_mbim_qdu_updater_file_open_ready(MbimDevice *device, GAsyncResult *res, gpoin
 {
 	WriteContext *ctx = user_data;
 	guint32 out_max_transfer_size;
-	FuChunk *chk = NULL;
+	g_autoptr(FuChunk) chk = NULL;
 	g_autoptr(MbimMessage) request = NULL;
 	g_autoptr(MbimMessage) response = NULL;
 
@@ -344,10 +354,14 @@ fu_mbim_qdu_updater_file_open_ready(MbimDevice *device, GAsyncResult *res, gpoin
 	}
 
 	ctx->chunks = fu_chunk_array_new_from_bytes(ctx->blob,
-						    0x00, /* start addr */
-						    0x00, /* page_sz */
+						    FU_CHUNK_ADDR_OFFSET_NONE,
+						    FU_CHUNK_PAGESZ_NONE,
 						    out_max_transfer_size);
-	chk = g_ptr_array_index(ctx->chunks, 0);
+	chk = fu_chunk_array_index(ctx->chunks, 0, &ctx->error);
+	if (chk == NULL) {
+		g_main_loop_quit(ctx->mainloop);
+		return;
+	}
 	request = mbim_message_qdu_file_write_set_new(fu_chunk_get_data_sz(chk),
 						      (const guint8 *)fu_chunk_get_data(chk),
 						      NULL);
@@ -451,7 +465,7 @@ fu_mbim_qdu_updater_write(FuMbimQduUpdater *self,
 {
 	g_autoptr(GMainLoop) mainloop = g_main_loop_new(NULL, FALSE);
 	g_autoptr(GArray) digest = fu_mbim_qdu_updater_get_checksum(blob);
-	g_autoptr(GPtrArray) chunks = NULL;
+	g_autoptr(FuChunkArray) chunks = NULL;
 	WriteContext ctx = {
 	    .mainloop = mainloop,
 	    .mbim_device = self->mbim_device,
@@ -511,5 +525,3 @@ fu_mbim_qdu_updater_new(const gchar *mbim_port)
 	self->mbim_port = g_strdup(mbim_port);
 	return self;
 }
-
-#endif /* MBIM_CHECK_VERSION(1,25,3) */

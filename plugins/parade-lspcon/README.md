@@ -32,16 +32,6 @@ Devices use an extra instance ID derived from SMBIOS, e.g.
 
 * `I2C\NAME_1AF80175:00:00&FAMILY_Google_Hatch`
 
-## Quirk Use
-
-This plugin uses the following plugin-specific quirks:
-
-### ParadeLspconAuxDeviceName
-
-The sysfs name of the `drm_dp_aux_dev` over which device version should be read.
-
-Since: 1.6.2
-
 ## Vendor ID security
 
 The vendor ID is specified by system firmware (such as ACPI tables) and is
@@ -56,3 +46,10 @@ as `/dev/drm_dp_aux0` as well as the i2c bus attached to the device, such as
 ## Version Considerations
 
 This plugin has been available since fwupd version `1.6.2`.
+
+## Owners
+
+Anyone can submit a pull request to modify this plugin, but the following people should be
+consulted before making major or functional changes:
+
+* PingYao Chen: @Pingyao5115

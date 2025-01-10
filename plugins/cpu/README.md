@@ -12,9 +12,31 @@ the physical CPU at fwupd startup.
 
 These devices add extra instance IDs from the CPUID values, e.g.
 
-* `CPUID\PRO_0&FAM_06`
+* `CPUID\PRO_0&FAM_06` (only-quirk)
 * `CPUID\PRO_0&FAM_06&MOD_0E`
 * `CPUID\PRO_0&FAM_06&MOD_0E&STP_3`
+
+## Quirk Use
+
+This plugin uses the following plugin-specific quirks:
+
+### CpuMitigationsRequired
+
+Mitigations required for this specific CPU. Valid values are:
+
+* `gds`
+
+Since: 1.9.4
+
+* `sinkclose`
+
+Since: 2.0.2
+
+### CpuSinkcloseMicrocodeVersion
+
+Minimum version of microcode to mitigate the `sinkclose` vulnerability.
+
+Since: 2.0.2
 
 ## External Interface Access
 
