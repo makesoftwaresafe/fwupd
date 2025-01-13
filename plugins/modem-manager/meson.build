@@ -1,19 +1,23 @@
-libmm_glib = dependency('mm-glib', version: '>= 1.10.0', required: get_option('plugin_modem_manager'))
-libqmi_glib = dependency('qmi-glib', version: '>= 1.23.1', required: get_option('plugin_modem_manager'))
-libmbim_glib = dependency('mbim-glib', version: '>= 1.22.0', required: get_option('plugin_modem_manager'))
+libmm_glib = dependency('mm-glib', version: '>= 1.18.0', required: get_option('plugin_modem_manager'))
+libqmi_glib = dependency('qmi-glib', version: '>= 1.30.0', required: get_option('plugin_modem_manager'))
+libmbim_glib = dependency('mbim-glib', version: '>= 1.26.0', required: get_option('plugin_modem_manager'))
 
 if libmm_glib.found() and \
    libqmi_glib.found() and \
    libmbim_glib.found() and \
-   get_option('plugin_modem_manager').require(gudev.found(),
-    error_message: 'gudev is needed for plugin_modem_manager').allowed()
+   get_option('plugin_modem_manager').allowed()
 
 cargs = ['-DG_LOG_DOMAIN="FuPluginMm"']
 cargs +=['-DMM_REQUIRED_VERSION="1.10.0"']
+plugins += {meson.current_source_dir().split('/')[-1]: true}
 
 plugin_quirks += files('modem-manager.quirk')
 
 shared_module('fu_plugin_modem_manager',
+  rustgen.process(
+    'fu-cinterion-fdl-updater.rs',
+    'fu-sahara.rs',
+  ),
   sources: [
     'fu-mm-plugin.c',
     'fu-mm-device.c',
@@ -21,7 +25,8 @@ shared_module('fu_plugin_modem_manager',
     'fu-mbim-qdu-updater.c',
     'fu-firehose-updater.c',
     'fu-sahara-loader.c',
-    'fu-mm-utils.c'
+    'fu-cinterion-fdl-updater.c',
+    'fu-dfota-updater.c',
   ],
   include_directories: plugin_incdirs,
   install: true,

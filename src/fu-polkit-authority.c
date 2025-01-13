@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2022 Richard Hughes <richard@hughsie.com>
+ * Copyright 2022 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #define G_LOG_DOMAIN "FuPolkitAuthority"
@@ -13,16 +13,6 @@
 #endif
 
 #include "fu-polkit-authority.h"
-
-#ifdef HAVE_POLKIT
-#ifndef HAVE_POLKIT_0_114
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunused-function"
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(PolkitAuthorizationResult, g_object_unref)
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(PolkitSubject, g_object_unref)
-#pragma clang diagnostic pop
-#endif /* HAVE_POLKIT_0_114 */
-#endif /* HAVE_POLKIT */
 
 struct _FuPolkitAuthority {
 	GObject parent_instance;
@@ -92,12 +82,11 @@ fu_polkit_authority_check(FuPolkitAuthority *self,
 #endif
 
 	g_return_if_fail(FU_IS_POLKIT_AUTHORITY(self));
-	g_return_if_fail(sender != NULL);
 	g_return_if_fail(action_id != NULL);
 	g_return_if_fail(callback != NULL);
 
 #ifdef HAVE_POLKIT
-	if (owner != NULL) {
+	if (owner != NULL && sender != NULL) {
 		g_autoptr(PolkitSubject) pksubject = polkit_system_bus_name_new(sender);
 		if (flags & FU_POLKIT_AUTHORITY_CHECK_FLAG_ALLOW_USER_INTERACTION)
 			pkflags |= POLKIT_CHECK_AUTHORIZATION_FLAGS_ALLOW_USER_INTERACTION;
@@ -149,7 +138,8 @@ fu_polkit_authority_finalize(GObject *obj)
 {
 #ifdef HAVE_POLKIT
 	FuPolkitAuthority *self = FU_POLKIT_AUTHORITY(obj);
-	g_object_unref(self->pkauthority);
+	if (self->pkauthority != NULL)
+		g_object_unref(self->pkauthority);
 #endif
 	G_OBJECT_CLASS(fu_polkit_authority_parent_class)->finalize(obj);
 }

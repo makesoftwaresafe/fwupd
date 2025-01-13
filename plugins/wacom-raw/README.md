@@ -11,6 +11,9 @@ connected using I²C and not USB.
 
 The HID DeviceInstanceId values are used, e.g. `HIDRAW\VEN_056A&DEV_4875`.
 
+To recover panels that have been flashed with the wrong firmware version, the panel may have a
+parent device with GUID constructed from the EDID, e.g. `DRM\VEN_BOE&DEV_086E`.
+
 ## Firmware Format
 
 The daemon will decompress the cabinet archive and extract a firmware blob in
@@ -36,11 +39,11 @@ Base address for firmware.
 
 Since: 1.2.4
 
-### WacomI2cFlashSize
+### Flags:requires-wait-for-replug
 
-Maximum size of the firmware zone.
+The device needs to replug into a bootloader mode.
 
-Since: 1.2.4
+Since: 1.9.14
 
 ## Update Behavior
 
@@ -62,3 +65,10 @@ This plugin requires ioctl `HIDIOCSFEATURE` access.
 ## Version Considerations
 
 This plugin has been available since fwupd version `1.2.4`.
+
+## Owners
+
+Anyone can submit a pull request to modify this plugin, but the following people should be
+consulted before making major or functional changes:
+
+* Tatsunosuke Tobita: @flying-elephant

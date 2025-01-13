@@ -4,7 +4,9 @@
 [![CodeQL](https://github.com/fwupd/fwupd/actions/workflows/codeql-analysis.yml/badge.svg)](https://github.com/fwupd/fwupd/actions/workflows/codeql-analysis.yml)
 [![Coverity Scan Build Status](https://scan.coverity.com/projects/10744/badge.svg)](https://scan.coverity.com/projects/10744)
 [![Fuzzing Status](https://oss-fuzz-build-logs.storage.googleapis.com/badges/fwupd.svg)](https://bugs.chromium.org/p/oss-fuzz/issues/list?sort=-opened&can=1&q=proj:fwupd)
-[![CircleCI](https://circleci.com/gh/fwupd/fwupd/tree/main.svg?style=svg)](https://circleci.com/gh/fwupd/fwupd/tree/main)
+[![Codecov Coverage Status](https://codecov.io/gh/fwupd/fwupd/graph/badge.svg?token=vykt2ROfu9)](https://codecov.io/gh/fwupd/fwupd)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/fwupd/fwupd/badge)](https://securityscorecards.dev/viewer/?uri=github.com/fwupd/fwupd)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/8751/badge)](https://www.bestpractices.dev/projects/8751)
 
 This project aims to make updating firmware on Linux automatic, safe, and reliable.
 
@@ -19,9 +21,9 @@ Additional information is available [at the website](https://fwupd.org/).
 
 ## Compiling
 
-The most up-to-date compilation instructions are available in the [Wiki](https://github.com/fwupd/fwupd/wiki/Compilation).
+See [Building and Debugging](docs/building.md) for how to build the fwupd development environment.
 
-**NOTE:** In most cases, end users should never compile fwupd from scratch; it's a
+**NOTE:** In most cases, end users should not compile fwupd from scratch; it's a
 complicated project with dozens of dependencies (and as many configuration options)
 and there's just too many things that can go wrong.
 
@@ -35,6 +37,15 @@ or using [Flatpak](https://github.com/fwupd/fwupd/wiki/fwupd-flatpak) might be
 useful to update a specific device on the command line that needs a bleeding
 edge fwupd version, but it should not be considered as a replacement to the
 distro-provided system version.
+
+### Using Tartan
+
+[Tartan](https://gitlab.freedesktop.org/tartan/tartan/-/wikis/home) is a LLVM static
+analysis plugin built to analyze GLib code. It can be installed and then run using:
+
+    mkdir build-tartan
+    CC=clang-17 meson ../
+    SCANBUILD=../contrib/tartan.sh ninja scan-build
 
 ## LVFS
 
@@ -74,6 +85,18 @@ This will download and apply all updates for your system.
 You can find more information about the update workflow in the end
 users section of the [fwupd website](https://fwupd.org).
 
+## Passim
+
+If the [Passim](https://github.com/hughsie/passim/blob/main/README.md) project is also installed
+and enabled, fwupd will re-publish the downloaded metadata file to be served on `0.0.0.0:27500`
+by default.
+
+Other clients on the same network can make use of this via mDNS/LLMNR to reduce network bandwidth
+to configured remotes.
+
+To disable this functionality either set `P2pPolicy=none` in `/etc/fwupd/daemon.conf`, uninstall
+the passim package or use `systemctl mask passim.service` on the terminal.
+
 ## Reporting status
 
 fwupd will encourage users to report both successful and failed updates back
@@ -81,7 +104,7 @@ to LVFS.  This is an optional feature, but encouraged as it provides valuable
 feedback to LVFS administrators and OEM developers regarding firmware update
 process efficacy.
 
-The privacy policy regarding this data can be viewed on the [fwupd website](https://fwupd.org/privacy).
+The privacy policy regarding this data can be viewed on the [lvfs readthedocs site](https://lvfs.readthedocs.io/en/latest/privacy.html).
 
 To report the status of an update, run:
 
@@ -112,19 +135,9 @@ Additionally, the list of approved firmware can be supplemented using
 
 ## Other frontends
 
-1. [GNOME Software](https://wiki.gnome.org/Apps/Software) is the graphical
- frontend available. When compiled with firmware support, it will check for
- updates periodically and automatically download firmware in the background.
- After the firmware has been downloaded, a popup will be displayed in GNOME
- Software to perform the update.
+fwupdmgr is a command line client, but various additional graphical frontends are enumerated in the [fwupdmgr man page](https://fwupd.github.io/libfwupdplugin/fwupdmgr.html#description).
 
-2. [KDE Discover](https://userbase.kde.org/Discover) is the software center,
- generally bundled with KDE Plasma. With the release of
- [KDE Plasma 5.14](https://www.kde.org/announcements/plasma-5.14.0.php),
- a new fwupd backend has been implemented in KDE Discover for firmware updates.
- These firmware updates are shown with other system updates.
+## SAST Tools
 
-3. [Wyse Management Suite](https://www.dell.com/en-us/work/shop/wyse-endpoints-and-software/wyse-management-suite/spd/wyse-wms)
- A software suite available on Dell IoT gateways and Wyse thin clients with built-in fwupd support.
- The remote administration interface can be used to download and deploy firmware
- updates.
+- [Coverity](https://scan.coverity.com/) - static analyzer for Java, C/C++, C#, JavaScript, Ruby, and Python code.
+- [PVS-Studio](https://pvs-studio.com/en/pvs-studio/?utm_source=website&utm_medium=github&utm_campaign=open_source) - static analyzer for C, C++, C#, and Java code.

@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2022 Richard Hughes <richard@hughsie.com>
+ * Copyright 2022 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #define G_LOG_DOMAIN "FwupdSecurityAttr"
@@ -38,14 +38,14 @@ fu_security_attr_add_bios_target_value(FwupdSecurityAttr *attr,
 	FuSecurityAttrPrivate *priv = GET_PRIVATE(self);
 	FwupdBiosSetting *bios_setting;
 	GPtrArray *values;
+	const gchar *current;
 
 	bios_setting = fu_context_get_bios_setting(priv->ctx, id);
 	if (bios_setting == NULL)
 		return;
+	current = fwupd_bios_setting_get_current_value(bios_setting);
 	fwupd_security_attr_set_bios_setting_id(attr, fwupd_bios_setting_get_id(bios_setting));
-	fwupd_security_attr_set_bios_setting_current_value(
-	    attr,
-	    fwupd_bios_setting_get_current_value(bios_setting));
+	fwupd_security_attr_set_bios_setting_current_value(attr, current);
 	if (fwupd_bios_setting_get_kind(bios_setting) != FWUPD_BIOS_SETTING_KIND_ENUMERATION)
 		return;
 	if (fwupd_bios_setting_get_read_only(bios_setting))
@@ -56,6 +56,13 @@ fu_security_attr_add_bios_target_value(FwupdSecurityAttr *attr,
 		g_autofree gchar *lower = g_utf8_strdown(possible, -1);
 		if (g_strrstr(lower, needle)) {
 			fwupd_security_attr_set_bios_setting_target_value(attr, possible);
+			/* this is built-in to the engine */
+			if (g_strcmp0(possible, current) != 0) {
+				fwupd_security_attr_add_flag(attr,
+							     FWUPD_SECURITY_ATTR_FLAG_CAN_FIX);
+				fwupd_security_attr_add_flag(attr,
+							     FWUPD_SECURITY_ATTR_FLAG_CAN_UNDO);
+			}
 			return;
 		}
 	}
@@ -67,20 +74,19 @@ fu_security_attr_init(FuSecurityAttr *self)
 }
 
 static void
-fu_security_attr_finalize(GObject *object)
+fu_security_attr_dispose(GObject *object)
 {
 	FuSecurityAttr *self = FU_SECURITY_ATTR(object);
 	FuSecurityAttrPrivate *priv = GET_PRIVATE(self);
-	if (priv->ctx != NULL)
-		g_object_unref(priv->ctx);
-	G_OBJECT_CLASS(fu_security_attr_parent_class)->finalize(object);
+	g_clear_object(&priv->ctx);
+	G_OBJECT_CLASS(fu_security_attr_parent_class)->dispose(object);
 }
 
 static void
 fu_security_attr_class_init(FuSecurityAttrClass *klass)
 {
 	GObjectClass *object_class = G_OBJECT_CLASS(klass);
-	object_class->finalize = fu_security_attr_finalize;
+	object_class->dispose = fu_security_attr_dispose;
 }
 
 /**

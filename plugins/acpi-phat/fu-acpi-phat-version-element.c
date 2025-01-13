@@ -1,12 +1,10 @@
 /*
- * Copyright (C) 2021 Richard Hughes <richard@hughsie.com>
+ * Copyright 2021 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #include "config.h"
-
-#include <fwupdplugin.h>
 
 #include "fu-acpi-phat-struct.h"
 #include "fu-acpi-phat-version-element.h"
@@ -33,18 +31,15 @@ fu_acpi_phat_version_element_export(FuFirmware *firmware,
 
 static gboolean
 fu_acpi_phat_version_element_parse(FuFirmware *firmware,
-				   GBytes *fw,
-				   gsize offset,
+				   GInputStream *stream,
 				   FwupdInstallFlags flags,
 				   GError **error)
 {
 	FuAcpiPhatVersionElement *self = FU_ACPI_PHAT_VERSION_ELEMENT(firmware);
-	gsize bufsz = 0;
-	const guint8 *buf = g_bytes_get_data(fw, &bufsz);
 	g_autoptr(GByteArray) st = NULL;
 
 	/* unpack */
-	st = fu_struct_acpi_phat_version_element_parse(buf, bufsz, offset, error);
+	st = fu_struct_acpi_phat_version_element_parse_stream(stream, 0x0, error);
 	if (st == NULL)
 		return FALSE;
 	fu_firmware_set_size(firmware, st->len);
@@ -56,7 +51,7 @@ fu_acpi_phat_version_element_parse(FuFirmware *firmware,
 	return TRUE;
 }
 
-static GBytes *
+static GByteArray *
 fu_acpi_phat_version_element_write(FuFirmware *firmware, GError **error)
 {
 	FuAcpiPhatVersionElement *self = FU_ACPI_PHAT_VERSION_ELEMENT(firmware);
@@ -76,7 +71,7 @@ fu_acpi_phat_version_element_write(FuFirmware *firmware, GError **error)
 		return NULL;
 
 	/* success */
-	return g_byte_array_free_to_bytes(g_steal_pointer(&st));
+	return g_steal_pointer(&st);
 }
 
 static void
@@ -115,6 +110,8 @@ fu_acpi_phat_version_element_build(FuFirmware *firmware, XbNode *n, GError **err
 static void
 fu_acpi_phat_version_element_init(FuAcpiPhatVersionElement *self)
 {
+	fu_firmware_set_images_max(FU_FIRMWARE(self), 2000);
+	fu_firmware_add_flag(FU_FIRMWARE(self), FU_FIRMWARE_FLAG_NO_AUTO_DETECTION);
 }
 
 static void
@@ -130,12 +127,12 @@ static void
 fu_acpi_phat_version_element_class_init(FuAcpiPhatVersionElementClass *klass)
 {
 	GObjectClass *object_class = G_OBJECT_CLASS(klass);
-	FuFirmwareClass *klass_firmware = FU_FIRMWARE_CLASS(klass);
+	FuFirmwareClass *firmware_class = FU_FIRMWARE_CLASS(klass);
 	object_class->finalize = fu_acpi_phat_version_element_finalize;
-	klass_firmware->parse = fu_acpi_phat_version_element_parse;
-	klass_firmware->write = fu_acpi_phat_version_element_write;
-	klass_firmware->export = fu_acpi_phat_version_element_export;
-	klass_firmware->build = fu_acpi_phat_version_element_build;
+	firmware_class->parse = fu_acpi_phat_version_element_parse;
+	firmware_class->write = fu_acpi_phat_version_element_write;
+	firmware_class->export = fu_acpi_phat_version_element_export;
+	firmware_class->build = fu_acpi_phat_version_element_build;
 }
 
 FuFirmware *

@@ -1,12 +1,13 @@
 /*
- * Copyright (C) 2021 Richard Hughes <richard@hughsie.com>
+ * Copyright 2021 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #include "config.h"
 
 #include "fu-mtd-device.h"
+#include "fu-mtd-ifd-device.h"
 #include "fu-mtd-plugin.h"
 
 struct _FuMtdPlugin {
@@ -40,8 +41,9 @@ fu_mtd_plugin_constructed(GObject *obj)
 	FuContext *ctx = fu_plugin_get_context(plugin);
 	fu_context_add_quirk_key(ctx, "MtdMetadataOffset");
 	fu_context_add_quirk_key(ctx, "MtdMetadataSize");
-	fu_plugin_add_udev_subsystem(plugin, "mtd");
-	fu_plugin_add_device_gtype(plugin, FU_TYPE_MTD_DEVICE);
+	fu_plugin_add_device_udev_subsystem(plugin, "mtd");
+	fu_plugin_set_device_gtype_default(plugin, FU_TYPE_MTD_DEVICE);
+	fu_plugin_add_device_gtype(plugin, FU_TYPE_MTD_IFD_DEVICE); /* coverage */
 }
 
 static void

@@ -1,12 +1,10 @@
 /*
- * Copyright (C) 2019 Richard Hughes <richard@hughsie.com>
+ * Copyright 2019 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #include "config.h"
-
-#include <fwupdplugin.h>
 
 #include "fu-ata-device.h"
 #include "fu-context-private.h"
@@ -17,7 +15,6 @@ fu_ata_id_func(void)
 {
 	gboolean ret;
 	gsize sz;
-	const gchar *ci = g_getenv("CI_NETWORK");
 	g_autofree gchar *data = NULL;
 	g_autofree gchar *path = NULL;
 	g_autoptr(FuContext) ctx = fu_context_new();
@@ -29,7 +26,7 @@ fu_ata_id_func(void)
 	g_assert_true(ret);
 
 	path = g_test_build_filename(G_TEST_DIST, "tests", "StarDrive-SBFM61.2.bin", NULL);
-	if (!g_file_test(path, G_FILE_TEST_EXISTS) && ci == NULL) {
+	if (!g_file_test(path, G_FILE_TEST_EXISTS)) {
 		g_test_skip("Missing StarDrive-SBFM61.2.bin");
 		return;
 	}
@@ -51,7 +48,6 @@ fu_ata_oui_func(void)
 {
 	gboolean ret;
 	gsize sz;
-	const gchar *ci = g_getenv("CI_NETWORK");
 	g_autofree gchar *data = NULL;
 	g_autofree gchar *path = NULL;
 	g_autofree gchar *str = NULL;
@@ -64,7 +60,7 @@ fu_ata_oui_func(void)
 	g_assert_true(ret);
 
 	path = g_test_build_filename(G_TEST_DIST, "tests", "Samsung SSD 860 EVO 500GB.bin", NULL);
-	if (!g_file_test(path, G_FILE_TEST_EXISTS) && ci == NULL) {
+	if (!g_file_test(path, G_FILE_TEST_EXISTS)) {
 		g_test_skip("Missing Samsung SSD 860 EVO 500GB.bin");
 		return;
 	}

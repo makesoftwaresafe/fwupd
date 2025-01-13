@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2022 Richard Hughes <richard@hughsie.com>
+ * Copyright 2022 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #define G_LOG_DOMAIN "FuFirmware"
@@ -16,6 +16,7 @@
 #include "fu-fdt-firmware.h"
 #include "fu-fdt-image.h"
 #include "fu-fdt-struct.h"
+#include "fu-input-stream.h"
 #include "fu-mem.h"
 
 /**
@@ -36,17 +37,11 @@ typedef struct {
 G_DEFINE_TYPE_WITH_PRIVATE(FuFdtFirmware, fu_fdt_firmware, FU_TYPE_FIRMWARE)
 #define GET_PRIVATE(o) (fu_fdt_firmware_get_instance_private(o))
 
-#define FDT_BEGIN_NODE 0x00000001
-#define FDT_END_NODE   0x00000002
-#define FDT_PROP       0x00000003
-#define FDT_NOP	       0x00000004
-#define FDT_END	       0x00000009
-
 #define FDT_LAST_COMP_VERSION 2
 #define FDT_DEPTH_MAX	      128
 
 static GString *
-fu_string_new_safe(const guint8 *buf, gsize bufsz, gsize offset, GError **error)
+fu_fdt_firmware_string_new_safe(const guint8 *buf, gsize bufsz, gsize offset, GError **error)
 {
 	g_autoptr(GString) str = g_string_new(NULL);
 	for (gsize i = offset; i < bufsz; i++) {
@@ -55,8 +50,8 @@ fu_string_new_safe(const guint8 *buf, gsize bufsz, gsize offset, GError **error)
 		g_string_append_c(str, (gchar)buf[i]);
 	}
 	g_set_error_literal(error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_INVALID_DATA,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_INVALID_DATA,
 			    "buffer not NULL terminated");
 	return NULL;
 }
@@ -146,7 +141,7 @@ fu_fdt_firmware_get_image_by_path(FuFdtFirmware *self, const gchar *path, GError
 }
 
 static gboolean
-fu_fdt_firmware_parse_dt_struct(FuFdtFirmware *self, GBytes *fw, GBytes *strtab, GError **error)
+fu_fdt_firmware_parse_dt_struct(FuFdtFirmware *self, GBytes *fw, GByteArray *strtab, GError **error)
 {
 	gsize bufsz = 0;
 	gsize offset = 0;
@@ -166,19 +161,18 @@ fu_fdt_firmware_parse_dt_struct(FuFdtFirmware *self, GBytes *fw, GBytes *strtab,
 		offset = fu_common_align_up(offset, FU_FIRMWARE_ALIGNMENT_4);
 		if (!fu_memread_uint32_safe(buf, bufsz, offset, &token, G_BIG_ENDIAN, error))
 			return FALSE;
-		g_debug("token: 0x%x", token);
 		offset += sizeof(guint32);
 
 		/* nothing to do */
-		if (token == FDT_NOP)
+		if (token == FU_FDT_TOKEN_NOP)
 			continue;
 
 		/* END */
-		if (token == FDT_END) {
+		if (token == FU_FDT_TOKEN_END) {
 			if (firmware_current != FU_FIRMWARE(self)) {
 				g_set_error_literal(error,
-						    G_IO_ERROR,
-						    G_IO_ERROR_INVALID_DATA,
+						    FWUPD_ERROR,
+						    FWUPD_ERROR_INVALID_DATA,
 						    "got END with unclosed node");
 				return FALSE;
 			}
@@ -187,21 +181,21 @@ fu_fdt_firmware_parse_dt_struct(FuFdtFirmware *self, GBytes *fw, GBytes *strtab,
 		}
 
 		/* BEGIN NODE */
-		if (token == FDT_BEGIN_NODE) {
+		if (token == FU_FDT_TOKEN_BEGIN_NODE) {
 			g_autoptr(GString) str = NULL;
 			g_autoptr(FuFirmware) image = NULL;
 
 			/* sanity check */
 			if (depth++ > FDT_DEPTH_MAX) {
 				g_set_error(error,
-					    G_IO_ERROR,
-					    G_IO_ERROR_INVALID_DATA,
+					    FWUPD_ERROR,
+					    FWUPD_ERROR_INVALID_DATA,
 					    "node depth exceeded maximum: 0x%x",
 					    (guint)FDT_DEPTH_MAX);
 				return FALSE;
 			}
 
-			str = fu_string_new_safe(buf, bufsz, offset, error);
+			str = fu_fdt_firmware_string_new_safe(buf, bufsz, offset, error);
 			if (str == NULL)
 				return FALSE;
 			offset += str->len + 1;
@@ -209,17 +203,18 @@ fu_fdt_firmware_parse_dt_struct(FuFdtFirmware *self, GBytes *fw, GBytes *strtab,
 			if (str->len > 0)
 				fu_firmware_set_id(image, str->str);
 			fu_firmware_set_offset(image, offset);
-			fu_firmware_add_image(firmware_current, image);
+			if (!fu_firmware_add_image_full(firmware_current, image, error))
+				return FALSE;
 			g_set_object(&firmware_current, image);
 			continue;
 		}
 
 		/* END NODE */
-		if (token == FDT_END_NODE) {
+		if (token == FU_FDT_TOKEN_END_NODE) {
 			if (firmware_current == FU_FIRMWARE(self)) {
 				g_set_error_literal(error,
-						    G_IO_ERROR,
-						    G_IO_ERROR_INVALID_DATA,
+						    FWUPD_ERROR,
+						    FWUPD_ERROR_INVALID_DATA,
 						    "got END NODE with no node to end");
 				return FALSE;
 			}
@@ -230,7 +225,7 @@ fu_fdt_firmware_parse_dt_struct(FuFdtFirmware *self, GBytes *fw, GBytes *strtab,
 		}
 
 		/* PROP */
-		if (token == FDT_PROP) {
+		if (token == FU_FDT_TOKEN_PROP) {
 			guint32 prop_len;
 			guint32 prop_nameoff;
 			g_autoptr(GBytes) blob = NULL;
@@ -240,8 +235,8 @@ fu_fdt_firmware_parse_dt_struct(FuFdtFirmware *self, GBytes *fw, GBytes *strtab,
 			/* sanity check */
 			if (firmware_current == FU_FIRMWARE(self)) {
 				g_set_error_literal(error,
-						    G_IO_ERROR,
-						    G_IO_ERROR_INVALID_DATA,
+						    FWUPD_ERROR,
+						    FWUPD_ERROR_INVALID_DATA,
 						    "got PROP with unopen node");
 				return FALSE;
 			}
@@ -255,10 +250,10 @@ fu_fdt_firmware_parse_dt_struct(FuFdtFirmware *self, GBytes *fw, GBytes *strtab,
 			offset += st_prp->len;
 
 			/* add property */
-			str = fu_string_new_safe(g_bytes_get_data(strtab, NULL),
-						 g_bytes_get_size(strtab),
-						 prop_nameoff,
-						 error);
+			str = fu_fdt_firmware_string_new_safe(strtab->data,
+							      strtab->len,
+							      prop_nameoff,
+							      error);
 			if (str == NULL) {
 				g_prefix_error(error, "invalid strtab offset 0x%x: ", prop_nameoff);
 				return FALSE;
@@ -273,8 +268,8 @@ fu_fdt_firmware_parse_dt_struct(FuFdtFirmware *self, GBytes *fw, GBytes *strtab,
 
 		/* unknown token */
 		g_set_error(error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_INVALID_DATA,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_INVALID_DATA,
 			    "invalid token 0x%x @0%x",
 			    token,
 			    (guint)offset);
@@ -282,13 +277,8 @@ fu_fdt_firmware_parse_dt_struct(FuFdtFirmware *self, GBytes *fw, GBytes *strtab,
 	}
 
 	/* did not see FDT_END */
-	if (!has_end) {
-		g_set_error_literal(error,
-				    G_IO_ERROR,
-				    G_IO_ERROR_INVALID_DATA,
-				    "did not see FDT_END");
-		return FALSE;
-	}
+	if (!has_end)
+		g_warning("did not see FDT_END, perhaps size_dt_struct is invalid?");
 
 	/* success */
 	return TRUE;
@@ -296,17 +286,20 @@ fu_fdt_firmware_parse_dt_struct(FuFdtFirmware *self, GBytes *fw, GBytes *strtab,
 
 static gboolean
 fu_fdt_firmware_parse_mem_rsvmap(FuFdtFirmware *self,
-				 const guint8 *buf,
-				 gsize bufsz,
+				 GInputStream *stream,
 				 gsize offset,
 				 GError **error)
 {
+	gsize streamsz = 0;
+
 	/* parse */
-	for (; offset < bufsz; offset += FU_STRUCT_FDT_RESERVE_ENTRY_SIZE) {
+	if (!fu_input_stream_size(stream, &streamsz, error))
+		return FALSE;
+	for (; offset < streamsz; offset += FU_STRUCT_FDT_RESERVE_ENTRY_SIZE) {
 		guint64 address = 0;
 		guint64 size = 0;
 		g_autoptr(GByteArray) st_res = NULL;
-		st_res = fu_struct_fdt_reserve_entry_parse(buf, bufsz, offset, error);
+		st_res = fu_struct_fdt_reserve_entry_parse_stream(stream, offset, error);
 		if (st_res == NULL)
 			return FALSE;
 		address = fu_struct_fdt_reserve_entry_get_address(st_res);
@@ -321,40 +314,37 @@ fu_fdt_firmware_parse_mem_rsvmap(FuFdtFirmware *self,
 }
 
 static gboolean
-fu_fdt_firmware_check_magic(FuFirmware *firmware, GBytes *fw, gsize offset, GError **error)
+fu_fdt_firmware_validate(FuFirmware *firmware, GInputStream *stream, gsize offset, GError **error)
 {
-	return fu_struct_fdt_validate(g_bytes_get_data(fw, NULL),
-				      g_bytes_get_size(fw),
-				      offset,
-				      error);
+	return fu_struct_fdt_validate_stream(stream, offset, error);
 }
 
 static gboolean
 fu_fdt_firmware_parse(FuFirmware *firmware,
-		      GBytes *fw,
-		      gsize offset,
+		      GInputStream *stream,
 		      FwupdInstallFlags flags,
 		      GError **error)
 {
 	FuFdtFirmware *self = FU_FDT_FIRMWARE(firmware);
 	FuFdtFirmwarePrivate *priv = GET_PRIVATE(self);
 	guint32 totalsize;
-	gsize bufsz = 0;
+	gsize streamsz = 0;
 	guint32 off_mem_rsvmap = 0;
-	const guint8 *buf = g_bytes_get_data(fw, &bufsz);
 	g_autoptr(GByteArray) st_hdr = NULL;
 
 	/* sanity check */
-	st_hdr = fu_struct_fdt_parse(buf, bufsz, offset, error);
+	st_hdr = fu_struct_fdt_parse_stream(stream, 0x0, error);
 	if (st_hdr == NULL)
 		return FALSE;
+	if (!fu_input_stream_size(stream, &streamsz, error))
+		return FALSE;
 	totalsize = fu_struct_fdt_get_totalsize(st_hdr);
-	if (totalsize > bufsz) {
+	if (totalsize > streamsz) {
 		g_set_error(error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_INVALID_DATA,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_INVALID_DATA,
 			    "truncated image, got 0x%x, expected >= 0x%x",
-			    (guint)bufsz,
+			    (guint)streamsz,
 			    (guint)totalsize);
 		return FALSE;
 	}
@@ -364,17 +354,13 @@ fu_fdt_firmware_parse(FuFirmware *firmware,
 	priv->cpuid = fu_struct_fdt_get_boot_cpuid_phys(st_hdr);
 	off_mem_rsvmap = fu_struct_fdt_get_off_mem_rsvmap(st_hdr);
 	if (off_mem_rsvmap != 0x0) {
-		if (!fu_fdt_firmware_parse_mem_rsvmap(self,
-						      buf,
-						      bufsz,
-						      offset + off_mem_rsvmap,
-						      error))
+		if (!fu_fdt_firmware_parse_mem_rsvmap(self, stream, off_mem_rsvmap, error))
 			return FALSE;
 	}
 	if (fu_struct_fdt_get_last_comp_version(st_hdr) < FDT_LAST_COMP_VERSION) {
 		g_set_error(error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_INVALID_DATA,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_INVALID_DATA,
 			    "invalid header version, got 0x%x, expected >= 0x%x",
 			    (guint)fu_struct_fdt_get_last_comp_version(st_hdr),
 			    (guint)FDT_LAST_COMP_VERSION);
@@ -385,21 +371,35 @@ fu_fdt_firmware_parse(FuFirmware *firmware,
 	/* parse device tree struct */
 	if (fu_struct_fdt_get_size_dt_struct(st_hdr) != 0x0 &&
 	    fu_struct_fdt_get_size_dt_strings(st_hdr) != 0x0) {
-		g_autoptr(GBytes) dt_strings = NULL;
-		g_autoptr(GBytes) dt_struct = NULL;
-		dt_strings = fu_bytes_new_offset(fw,
-						 offset + fu_struct_fdt_get_off_dt_strings(st_hdr),
-						 fu_struct_fdt_get_size_dt_strings(st_hdr),
-						 error);
+		g_autoptr(GByteArray) dt_strings = NULL;
+		g_autoptr(GByteArray) dt_struct = NULL;
+		g_autoptr(GBytes) dt_struct_buf = NULL;
+		dt_strings =
+		    fu_input_stream_read_byte_array(stream,
+						    fu_struct_fdt_get_off_dt_strings(st_hdr),
+						    fu_struct_fdt_get_size_dt_strings(st_hdr),
+						    NULL,
+						    error);
 		if (dt_strings == NULL)
 			return FALSE;
-		dt_struct = fu_bytes_new_offset(fw,
-						offset + fu_struct_fdt_get_off_dt_struct(st_hdr),
-						fu_struct_fdt_get_size_dt_struct(st_hdr),
-						error);
+		dt_struct =
+		    fu_input_stream_read_byte_array(stream,
+						    fu_struct_fdt_get_off_dt_struct(st_hdr),
+						    fu_struct_fdt_get_size_dt_struct(st_hdr),
+						    NULL,
+						    error);
 		if (dt_struct == NULL)
 			return FALSE;
-		if (!fu_fdt_firmware_parse_dt_struct(self, dt_struct, dt_strings, error))
+		if (dt_struct->len != fu_struct_fdt_get_size_dt_struct(st_hdr)) {
+			g_set_error(error,
+				    FWUPD_ERROR,
+				    FWUPD_ERROR_INVALID_DATA,
+				    "invalid firmware -- dt_struct invalid");
+			return FALSE;
+		}
+		dt_struct_buf =
+		    g_byte_array_free_to_bytes(g_steal_pointer(&dt_struct)); /* nocheck:blocked */
+		if (!fu_fdt_firmware_parse_dt_struct(self, dt_struct_buf, dt_strings, error))
 			return FALSE;
 	}
 
@@ -445,14 +445,14 @@ fu_fdt_firmware_write_image(FuFdtFirmware *self,
 	/* sanity check */
 	if (depth > 0 && id == NULL) {
 		g_set_error_literal(error,
-				    G_IO_ERROR,
-				    G_IO_ERROR_INVALID_DATA,
+				    FWUPD_ERROR,
+				    FWUPD_ERROR_INVALID_DATA,
 				    "child FuFdtImage requires ID");
 		return FALSE;
 	}
 
 	/* BEGIN_NODE, ID, NUL */
-	fu_byte_array_append_uint32(helper->dt_struct, FDT_BEGIN_NODE, G_BIG_ENDIAN);
+	fu_byte_array_append_uint32(helper->dt_struct, FU_FDT_TOKEN_BEGIN_NODE, G_BIG_ENDIAN);
 	if (id != NULL) {
 		g_byte_array_append(helper->dt_struct, (const guint8 *)id, strlen(id) + 1);
 	} else {
@@ -469,7 +469,7 @@ fu_fdt_firmware_write_image(FuFdtFirmware *self,
 		blob = fu_fdt_image_get_attr(img, key, error);
 		if (blob == NULL)
 			return FALSE;
-		fu_byte_array_append_uint32(helper->dt_struct, FDT_PROP, G_BIG_ENDIAN);
+		fu_byte_array_append_uint32(helper->dt_struct, FU_FDT_TOKEN_PROP, G_BIG_ENDIAN);
 		fu_struct_fdt_prop_set_len(st_prp, g_bytes_get_size(blob));
 		fu_struct_fdt_prop_set_nameoff(st_prp,
 					       fu_fdt_firmware_append_to_strtab(helper, key));
@@ -486,11 +486,11 @@ fu_fdt_firmware_write_image(FuFdtFirmware *self,
 	}
 
 	/* END_NODE */
-	fu_byte_array_append_uint32(helper->dt_struct, FDT_END_NODE, G_BIG_ENDIAN);
+	fu_byte_array_append_uint32(helper->dt_struct, FU_FDT_TOKEN_END_NODE, G_BIG_ENDIAN);
 	return TRUE;
 }
 
-static GBytes *
+static GByteArray *
 fu_fdt_firmware_write(FuFirmware *firmware, GError **error)
 {
 	FuFdtFirmware *self = FU_FDT_FIRMWARE(firmware);
@@ -519,7 +519,7 @@ fu_fdt_firmware_write(FuFirmware *firmware, GError **error)
 
 	/* only one root node supported */
 	if (images->len != 1) {
-		g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA, "no root node");
+		g_set_error_literal(error, FWUPD_ERROR, FWUPD_ERROR_INVALID_DATA, "no root node");
 		return NULL;
 	}
 	if (!fu_fdt_firmware_write_image(self,
@@ -528,7 +528,7 @@ fu_fdt_firmware_write(FuFirmware *firmware, GError **error)
 					 0,
 					 error))
 		return NULL;
-	fu_byte_array_append_uint32(dt_struct, FDT_END, G_BIG_ENDIAN);
+	fu_byte_array_append_uint32(dt_struct, FU_FDT_TOKEN_END, G_BIG_ENDIAN);
 
 	/* dt_strings */
 	off_dt_strings =
@@ -554,7 +554,7 @@ fu_fdt_firmware_write(FuFirmware *firmware, GError **error)
 	fu_byte_array_align_up(st_hdr, FU_FIRMWARE_ALIGNMENT_4, 0x0);
 
 	/* success */
-	return g_byte_array_free_to_bytes(g_steal_pointer(&st_hdr));
+	return g_steal_pointer(&st_hdr);
 }
 
 static gboolean
@@ -583,12 +583,12 @@ fu_fdt_firmware_init(FuFdtFirmware *self)
 static void
 fu_fdt_firmware_class_init(FuFdtFirmwareClass *klass)
 {
-	FuFirmwareClass *klass_firmware = FU_FIRMWARE_CLASS(klass);
-	klass_firmware->check_magic = fu_fdt_firmware_check_magic;
-	klass_firmware->export = fu_fdt_firmware_export;
-	klass_firmware->parse = fu_fdt_firmware_parse;
-	klass_firmware->write = fu_fdt_firmware_write;
-	klass_firmware->build = fu_fdt_firmware_build;
+	FuFirmwareClass *firmware_class = FU_FIRMWARE_CLASS(klass);
+	firmware_class->validate = fu_fdt_firmware_validate;
+	firmware_class->export = fu_fdt_firmware_export;
+	firmware_class->parse = fu_fdt_firmware_parse;
+	firmware_class->write = fu_fdt_firmware_write;
+	firmware_class->build = fu_fdt_firmware_build;
 }
 
 /**

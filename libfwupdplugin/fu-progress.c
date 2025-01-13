@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2021 Richard Hughes <richard@hughsie.com>
+ * Copyright 2021 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #define G_LOG_DOMAIN "FuProgress"
@@ -10,7 +10,7 @@
 
 #include <math.h>
 
-#include "fu-progress.h"
+#include "fu-progress-private.h"
 #include "fu-string.h"
 
 /**
@@ -61,16 +61,19 @@ struct _FuProgress {
 	GObject parent_instance;
 	gchar *id;
 	gchar *name;
-	FuProgressFlags flags;
+	FuProgressFlag flags;
 	guint percentage;
 	FwupdStatus status;
 	GPtrArray *children; /* of FuProgress */
 	gboolean profile;
 	gdouble duration; /* seconds */
+	gdouble global_fraction;
 	guint step_weighting;
 	GTimer *timer;
 	GTimer *timer_child;
 	guint step_now;
+	guint step_done;
+	guint step_scaling;
 	FuProgress *parent; /* no-ref */
 };
 
@@ -78,7 +81,15 @@ enum { SIGNAL_PERCENTAGE_CHANGED, SIGNAL_STATUS_CHANGED, SIGNAL_LAST };
 
 static guint signals[SIGNAL_LAST] = {0};
 
-G_DEFINE_TYPE(FuProgress, fu_progress, G_TYPE_OBJECT)
+static void
+fu_progress_codec_iface_init(FwupdCodecInterface *iface);
+
+G_DEFINE_TYPE_WITH_CODE(FuProgress,
+			fu_progress,
+			G_TYPE_OBJECT,
+			G_IMPLEMENT_INTERFACE(FWUPD_TYPE_CODEC, fu_progress_codec_iface_init))
+
+#define FU_PROGRESS_STEPS_MAX 1000
 
 /**
  * fu_progress_get_id:
@@ -188,50 +199,6 @@ fu_progress_get_status(FuProgress *self)
 }
 
 /**
- * fu_progress_flag_to_string:
- * @flag: an internal progress flag, e.g. %FU_PROGRESS_FLAG_GUESSED
- *
- * Converts an progress flag to a string.
- *
- * Returns: identifier string
- *
- * Since: 1.7.0
- **/
-const gchar *
-fu_progress_flag_to_string(FuProgressFlags flag)
-{
-	if (flag == FU_PROGRESS_FLAG_GUESSED)
-		return "guessed";
-	if (flag == FU_PROGRESS_FLAG_NO_PROFILE)
-		return "no-profile";
-	if (flag == FU_PROGRESS_FLAG_NO_TRACEBACK)
-		return "no-traceback";
-	return NULL;
-}
-
-/**
- * fu_progress_flag_from_string:
- * @flag: a string, e.g. `guessed`
- *
- * Converts a string to an progress flag.
- *
- * Returns: enumerated value
- *
- * Since: 1.7.0
- **/
-FuProgressFlags
-fu_progress_flag_from_string(const gchar *flag)
-{
-	if (g_strcmp0(flag, "guessed") == 0)
-		return FU_PROGRESS_FLAG_GUESSED;
-	if (g_strcmp0(flag, "no-profile") == 0)
-		return FU_PROGRESS_FLAG_NO_PROFILE;
-	if (g_strcmp0(flag, "no-traceback") == 0)
-		return FU_PROGRESS_FLAG_NO_TRACEBACK;
-	return FU_PROGRESS_FLAG_UNKNOWN;
-}
-
-/**
  * fu_progress_add_flag:
  * @self: a #FuProgress
  * @flag: an internal progress flag, e.g. %FU_PROGRESS_FLAG_GUESSED
@@ -241,7 +208,7 @@ fu_progress_flag_from_string(const gchar *flag)
  * Since: 1.7.0
  **/
 void
-fu_progress_add_flag(FuProgress *self, FuProgressFlags flag)
+fu_progress_add_flag(FuProgress *self, FuProgressFlag flag)
 {
 	g_return_if_fail(FU_IS_PROGRESS(self));
 	self->flags |= flag;
@@ -257,7 +224,7 @@ fu_progress_add_flag(FuProgress *self, FuProgressFlags flag)
  * Since: 1.7.0
  **/
 void
-fu_progress_remove_flag(FuProgress *self, FuProgressFlags flag)
+fu_progress_remove_flag(FuProgress *self, FuProgressFlag flag)
 {
 	g_return_if_fail(FU_IS_PROGRESS(self));
 	self->flags &= ~flag;
@@ -273,7 +240,7 @@ fu_progress_remove_flag(FuProgress *self, FuProgressFlags flag)
  * Since: 1.7.0
  **/
 gboolean
-fu_progress_has_flag(FuProgress *self, FuProgressFlags flag)
+fu_progress_has_flag(FuProgress *self, FuProgressFlag flag)
 {
 	g_return_val_if_fail(FU_IS_PROGRESS(self), FALSE);
 	return (self->flags & flag) > 0;
@@ -400,8 +367,13 @@ fu_progress_set_percentage(FuProgress *self, guint percentage)
 	}
 
 	/* done */
-	if (percentage == 100)
+	if (percentage == 100) {
 		fu_progress_set_duration(self, g_timer_elapsed(self->timer, NULL));
+		for (guint i = 0; i < self->children->len; i++) {
+			FuProgress *child = g_ptr_array_index(self->children, i);
+			g_signal_handlers_disconnect_by_data(child, self);
+		}
+	}
 
 	/* save */
 	self->percentage = percentage;
@@ -508,9 +480,21 @@ fu_progress_set_steps(FuProgress *self, guint step_max)
 	g_return_if_fail(FU_IS_PROGRESS(self));
 	g_return_if_fail(self->id != NULL);
 
+	/* if there is an insane number of steps, scale these */
+	if (step_max > FU_PROGRESS_STEPS_MAX) {
+		self->step_scaling = step_max / 100;
+		step_max = 100;
+	}
+
 	/* create fake steps */
 	for (guint i = 0; i < step_max; i++)
 		fu_progress_add_step(self, self->status, 0, NULL);
+
+	/* adjust global fraction */
+	for (guint i = 0; i < self->children->len; i++) {
+		FuProgress *child = g_ptr_array_index(self->children, i);
+		child->global_fraction = self->global_fraction / step_max;
+	}
 
 	/* show that the sub-progress has been created */
 	fu_progress_set_percentage(self, 0);
@@ -518,6 +502,23 @@ fu_progress_set_steps(FuProgress *self, guint step_max)
 
 	/* reset child timer */
 	g_timer_start(self->timer_child);
+}
+
+/**
+ * fu_progress_get_global_fraction:
+ * @self: A #FuProgress
+ *
+ * Gets the global percentage.
+ *
+ * Return value: fraction, where 1.0 is 100%.
+ *
+ * Since: 2.0.4
+ **/
+gdouble
+fu_progress_get_global_fraction(FuProgress *self)
+{
+	g_return_val_if_fail(FU_IS_PROGRESS(self), -1.f);
+	return self->global_fraction;
 }
 
 /**
@@ -578,6 +579,8 @@ fu_progress_get_step_percentage(FuProgress *self, guint idx)
 			current += child->step_weighting;
 		total += child->step_weighting;
 	}
+	if (total == 0)
+		return -1;
 	return ((gdouble)current * 100.f) / (gdouble)total;
 }
 
@@ -670,16 +673,23 @@ fu_progress_add_step(FuProgress *self, FwupdStatus status, guint value, const gc
 
 	g_return_if_fail(FU_IS_PROGRESS(self));
 	g_return_if_fail(self->id != NULL);
+	g_return_if_fail(self->children->len < 100 * 1000);
 
 	/* save data */
 	fu_progress_set_status(child, status);
 	child->step_weighting = value;
 
-	/* connect signals */
-	g_signal_connect(FU_PROGRESS(child),
-			 "percentage-changed",
-			 G_CALLBACK(fu_progress_child_percentage_changed_cb),
-			 self);
+	/* adjust global percentage */
+	if (value > 0)
+		child->global_fraction = self->global_fraction * (gdouble)value / 100.f;
+
+	/* connect signals as required */
+	if (fu_progress_get_global_fraction(self) > 0.001f) {
+		g_signal_connect(FU_PROGRESS(child),
+				 "percentage-changed",
+				 G_CALLBACK(fu_progress_child_percentage_changed_cb),
+				 self);
+	}
 	g_signal_connect(FU_PROGRESS(child),
 			 "status-changed",
 			 G_CALLBACK(fu_progress_child_status_changed_cb),
@@ -740,13 +750,18 @@ fu_progress_finished(FuProgress *self)
 FuProgress *
 fu_progress_get_child(FuProgress *self)
 {
+	guint step_now;
+
 	g_return_val_if_fail(FU_IS_PROGRESS(self), NULL);
 	g_return_val_if_fail(self->id != NULL, NULL);
+
+	step_now = self->step_now / self->step_scaling;
+
 	g_return_val_if_fail(self->children->len > 0, NULL);
-	g_return_val_if_fail(self->children->len > self->step_now, NULL);
+	g_return_val_if_fail(self->children->len > step_now, NULL);
 
 	/* all preallocated, nothing to do */
-	return FU_PROGRESS(g_ptr_array_index(self->children, self->step_now));
+	return FU_PROGRESS(g_ptr_array_index(self->children, step_now));
 }
 
 static void
@@ -829,6 +844,13 @@ fu_progress_step_done(FuProgress *self)
 
 	g_return_if_fail(FU_IS_PROGRESS(self));
 	g_return_if_fail(self->id != NULL);
+
+	/* ignore steps */
+	if (self->step_scaling > 1) {
+		if (self->step_now >= self->children->len ||
+		    self->step_done++ % self->step_scaling != 0)
+			return;
+	}
 
 	/* did we call done when no size set? */
 	if (self->children->len == 0) {
@@ -971,7 +993,12 @@ fu_progress_traceback(FuProgress *self)
 	/* allow override */
 	if (tmp != NULL) {
 		g_autoptr(GError) error_local = NULL;
-		if (!fu_strtoull(tmp, &threshold_ms, 0, G_MAXUINT, &error_local))
+		if (!fu_strtoull(tmp,
+				 &threshold_ms,
+				 0,
+				 G_MAXUINT,
+				 FU_INTEGER_BASE_AUTO,
+				 &error_local))
 			g_warning("invalid threshold value: %s", tmp);
 	}
 
@@ -982,61 +1009,47 @@ fu_progress_traceback(FuProgress *self)
 }
 
 static void
-fu_progress_to_string_cb(FuProgress *self, guint idt, GString *str)
+fu_progress_add_string(FwupdCodec *codec, guint idt, GString *str)
 {
+	FuProgress *self = FU_PROGRESS(codec);
+
 	/* not interesting */
 	if (self->id == NULL && self->name == NULL)
 		return;
 
-	if (self->id != NULL)
-		fu_string_append(str, idt, "Id", self->id);
-	if (self->name != NULL)
-		fu_string_append(str, idt, "Name", self->name);
+	fwupd_codec_string_append(str, idt, "Id", self->id);
+	fwupd_codec_string_append(str, idt, "Name", self->name);
 	if (self->percentage != G_MAXUINT)
-		fu_string_append_ku(str, idt, "Percentage", self->percentage);
+		fwupd_codec_string_append_int(str, idt, "Percentage", self->percentage);
 	if (self->status != FWUPD_STATUS_UNKNOWN)
-		fu_string_append(str, idt, "Status", fwupd_status_to_string(self->status));
+		fwupd_codec_string_append(str, idt, "Status", fwupd_status_to_string(self->status));
 	if (self->duration > 0.0001)
-		fu_string_append_ku(str, idt, "DurationMs", self->duration * 1000.f);
-	if (self->step_weighting > 0)
-		fu_string_append_ku(str, idt, "StepWeighting", self->step_weighting);
-	if (self->step_now > 0)
-		fu_string_append_ku(str, idt, "StepNow", self->step_now);
+		fwupd_codec_string_append_int(str, idt, "DurationMs", self->duration * 1000.f);
+	fwupd_codec_string_append_int(str, idt, "StepWeighting", self->step_weighting);
+	fwupd_codec_string_append_int(str, idt, "StepNow", self->step_now);
 	for (guint i = 0; i < self->children->len; i++) {
 		FuProgress *child = g_ptr_array_index(self->children, i);
-		fu_progress_to_string_cb(child, idt + 1, str);
+		fwupd_codec_add_string(FWUPD_CODEC(child), idt + 1, str);
 	}
 }
 
-/**
- * fu_progress_to_string:
- * @self: A #FuProgress
- *
- * Prints the progress for debugging.
- *
- * Return value: (transfer full): string
- *
- * Since: 1.8.7
- **/
-gchar *
-fu_progress_to_string(FuProgress *self)
+static void
+fu_progress_codec_iface_init(FwupdCodecInterface *iface)
 {
-	g_autoptr(GString) str = g_string_new(NULL);
-	fu_progress_to_string_cb(self, 0, str);
-	if (str->len == 0)
-		return NULL;
-	return g_string_free(g_steal_pointer(&str), FALSE);
+	iface->add_string = fu_progress_add_string;
 }
 
 static void
 fu_progress_init(FuProgress *self)
 {
 	self->status = FWUPD_STATUS_UNKNOWN;
+	self->step_scaling = 1;
 	self->percentage = G_MAXUINT;
 	self->timer = g_timer_new();
 	self->timer_child = g_timer_new();
 	self->children = g_ptr_array_new_with_free_func((GDestroyNotify)g_object_unref);
 	self->duration = 0.f;
+	self->global_fraction = 1.f;
 }
 
 static void

@@ -1,12 +1,10 @@
 /*#
- * Copyright (C) 2021 Richard Hughes <richard@hughsie.com>
+ * Copyright 2021 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #include "config.h"
-
-#include <fwupdplugin.h>
 
 #include "fu-cfu-module.h"
 #include "fu-cfu-struct.h"
@@ -23,8 +21,8 @@ static void
 fu_cfu_module_to_string(FuDevice *device, guint idt, GString *str)
 {
 	FuCfuModule *self = FU_CFU_MODULE(device);
-	fu_string_append_kx(str, idt, "ComponentId", self->component_id);
-	fu_string_append_kx(str, idt, "Bank", self->bank);
+	fwupd_codec_string_append_hex(str, idt, "ComponentId", self->component_id);
+	fwupd_codec_string_append_hex(str, idt, "Bank", self->bank);
 }
 
 guint8
@@ -42,29 +40,22 @@ fu_cfu_module_setup(FuCfuModule *self, const guint8 *buf, gsize bufsz, gsize off
 	g_autoptr(GByteArray) st = NULL;
 
 	/* parse */
-	st = fu_struct_cfu_rsp_get_firmware_version_component_parse(buf, bufsz, offset, error);
+	st = fu_struct_cfu_get_version_rsp_component_parse(buf, bufsz, offset, error);
 	if (st == NULL)
 		return FALSE;
 
 	/* these GUIDs may cause the name or version-format to be overwritten */
-	self->component_id = fu_struct_cfu_rsp_get_firmware_version_component_get_component_id(st);
+	self->component_id = fu_struct_cfu_get_version_rsp_component_get_component_id(st);
 	fu_device_add_instance_u8(device, "CID", self->component_id);
-	if (!fu_device_build_instance_id(device, error, "HIDRAW", "VEN", "DEV", NULL))
+	if (!fu_device_build_instance_id(device, error, "USB", "VID", "PID", NULL))
 		return FALSE;
-	if (!fu_device_build_instance_id(device, error, "HIDRAW", "VEN", "DEV", "CID", NULL))
+	if (!fu_device_build_instance_id(device, error, "USB", "VID", "PID", "CID", NULL))
 		return FALSE;
 
 	/* bank */
-	self->bank = fu_struct_cfu_rsp_get_firmware_version_component_get_flags(st) & 0b11;
+	self->bank = fu_struct_cfu_get_version_rsp_component_get_flags(st) & 0b11;
 	fu_device_add_instance_u4(device, "BANK", self->bank);
-	if (!fu_device_build_instance_id(device,
-					 error,
-					 "HIDRAW",
-					 "VEN",
-					 "DEV",
-					 "CID",
-					 "BANK",
-					 NULL))
+	if (!fu_device_build_instance_id(device, error, "USB", "VID", "PID", "CID", "BANK", NULL))
 		return FALSE;
 
 	/* set name, if not already set using a quirk */
@@ -78,9 +69,8 @@ fu_cfu_module_setup(FuCfuModule *self, const guint8 *buf, gsize bufsz, gsize off
 	}
 
 	/* version */
-	fu_device_set_version_from_uint32(
-	    device,
-	    fu_struct_cfu_rsp_get_firmware_version_component_get_fw_version(st));
+	fu_device_set_version_raw(device,
+				  fu_struct_cfu_get_version_rsp_component_get_fw_version(st));
 
 	/* logical ID */
 	logical_id = g_strdup_printf("CID:0x%02x,BANK:0x%02x", self->component_id, self->bank);
@@ -92,26 +82,48 @@ fu_cfu_module_setup(FuCfuModule *self, const guint8 *buf, gsize bufsz, gsize off
 
 static FuFirmware *
 fu_cfu_module_prepare_firmware(FuDevice *device,
-			       GBytes *fw,
+			       GInputStream *stream,
+			       FuProgress *progress,
 			       FwupdInstallFlags flags,
 			       GError **error)
 {
 	g_autoptr(FuFirmware) firmware = fu_firmware_new();
+	g_autoptr(FuFirmware) firmware_archive = fu_archive_firmware_new();
+	g_autoptr(FuFirmware) fw_offer = NULL;
+	g_autoptr(FuFirmware) fw_payload = NULL;
 	g_autoptr(FuFirmware) offer = fu_cfu_offer_new();
 	g_autoptr(FuFirmware) payload = fu_cfu_payload_new();
-	g_autoptr(GBytes) fw_offset = NULL;
+	g_autoptr(GBytes) blob_offer = NULL;
+	g_autoptr(GBytes) blob_payload = NULL;
+
+	/* parse archive */
+	if (!fu_firmware_parse_stream(firmware_archive, stream, 0x0, flags, error))
+		return NULL;
 
 	/* offer */
-	if (!fu_firmware_parse(offer, fw, flags, error))
+	fw_offer = fu_archive_firmware_get_image_fnmatch(FU_ARCHIVE_FIRMWARE(firmware_archive),
+							 "*.offer.bin",
+							 error);
+	if (fw_offer == NULL)
+		return NULL;
+	blob_offer = fu_firmware_get_bytes(fw_offer, NULL);
+	if (blob_offer == NULL)
+		return NULL;
+	if (!fu_firmware_parse_bytes(offer, blob_offer, 0x0, flags, error))
 		return NULL;
 	fu_firmware_set_id(offer, FU_FIRMWARE_ID_HEADER);
 	fu_firmware_add_image(firmware, offer);
 
 	/* payload */
-	fw_offset = fu_bytes_new_offset(fw, 0x10, g_bytes_get_size(fw) - 0x10, error);
-	if (fw_offset == NULL)
+	fw_payload = fu_archive_firmware_get_image_fnmatch(FU_ARCHIVE_FIRMWARE(firmware_archive),
+							   "*.payload.bin",
+							   error);
+	if (fw_payload == NULL)
 		return NULL;
-	if (!fu_firmware_parse(payload, fw_offset, flags, error))
+	blob_payload = fu_firmware_get_bytes(fw_payload, NULL);
+	if (blob_payload == NULL)
+		return NULL;
+	if (!fu_firmware_parse_bytes(payload, blob_payload, 0x0, flags, error))
 		return NULL;
 	fu_firmware_set_id(payload, FU_FIRMWARE_ID_PAYLOAD);
 	fu_firmware_add_image(firmware, payload);
@@ -128,23 +140,19 @@ fu_cfu_module_write_firmware(FuDevice *device,
 			     GError **error)
 {
 	FuDevice *proxy;
-	g_autoptr(GBytes) fw = NULL;
-
-	/* get the whole image */
-	fw = fu_firmware_get_bytes(firmware, error);
-	if (fw == NULL)
-		return FALSE;
+	FuDeviceClass *device_class;
 
 	/* process by the parent */
 	proxy = fu_device_get_proxy(device);
 	if (proxy == NULL) {
 		g_set_error(error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_NOT_SUPPORTED,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_NOT_SUPPORTED,
 			    "no proxy device assigned");
 		return FALSE;
 	}
-	return fu_device_write_firmware(proxy, fw, progress, flags, error);
+	device_class = FU_DEVICE_GET_CLASS(proxy);
+	return device_class->write_firmware(proxy, firmware, progress, flags, error);
 }
 
 static void
@@ -158,32 +166,39 @@ fu_cfu_module_set_progress(FuDevice *self, FuProgress *progress)
 	fu_progress_add_step(progress, FWUPD_STATUS_DEVICE_BUSY, 2, "reload");
 }
 
+static gchar *
+fu_cfu_module_convert_version(FuDevice *device, guint64 version_raw)
+{
+	return fu_version_from_uint32(version_raw, fu_device_get_version_format(device));
+}
+
 static void
 fu_cfu_module_init(FuCfuModule *self)
 {
 	fu_device_add_protocol(FU_DEVICE(self), "com.microsoft.cfu");
-	fu_device_set_version_format(FU_DEVICE(self), FWUPD_VERSION_FORMAT_QUAD);
+	fu_device_set_version_format(FU_DEVICE(self), FWUPD_VERSION_FORMAT_SURFACE);
+	fu_device_set_firmware_gtype(FU_DEVICE(self), FU_TYPE_ARCHIVE_FIRMWARE);
+	fu_device_add_flag(FU_DEVICE(self), FWUPD_DEVICE_FLAG_USABLE_DURING_UPDATE);
+	fu_device_add_flag(FU_DEVICE(self), FWUPD_DEVICE_FLAG_UPDATABLE);
+	fu_device_add_private_flag(FU_DEVICE(self), FU_DEVICE_PRIVATE_FLAG_MD_SET_SIGNED);
+	fu_device_add_private_flag(FU_DEVICE(self), FU_DEVICE_PRIVATE_FLAG_USE_PARENT_FOR_OPEN);
 }
 
 static void
 fu_cfu_module_class_init(FuCfuModuleClass *klass)
 {
-	FuDeviceClass *klass_device = FU_DEVICE_CLASS(klass);
-	klass_device->to_string = fu_cfu_module_to_string;
-	klass_device->prepare_firmware = fu_cfu_module_prepare_firmware;
-	klass_device->write_firmware = fu_cfu_module_write_firmware;
-	klass_device->set_progress = fu_cfu_module_set_progress;
+	FuDeviceClass *device_class = FU_DEVICE_CLASS(klass);
+	device_class->to_string = fu_cfu_module_to_string;
+	device_class->prepare_firmware = fu_cfu_module_prepare_firmware;
+	device_class->write_firmware = fu_cfu_module_write_firmware;
+	device_class->set_progress = fu_cfu_module_set_progress;
+	device_class->convert_version = fu_cfu_module_convert_version;
 }
 
 FuCfuModule *
 fu_cfu_module_new(FuDevice *parent)
 {
 	FuCfuModule *self;
-	self = g_object_new(FU_TYPE_CFU_MODULE,
-			    "ctx",
-			    fu_device_get_context(parent),
-			    "proxy",
-			    parent,
-			    NULL);
+	self = g_object_new(FU_TYPE_CFU_MODULE, "proxy", parent, "parent", parent, NULL);
 	return self;
 }

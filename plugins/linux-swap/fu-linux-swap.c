@@ -1,14 +1,12 @@
 /*
- * Copyright (C) 2020 Richard Hughes <richard@hughsie.com>
+ * Copyright 2020 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #include "config.h"
 
 #include <fwupdplugin.h>
-
-#include <string.h>
 
 #include "fu-linux-swap.h"
 
@@ -21,7 +19,7 @@ struct _FuLinuxSwap {
 G_DEFINE_TYPE(FuLinuxSwap, fu_linux_swap, G_TYPE_OBJECT)
 
 static gchar *
-fu_strdup_nospaces(const gchar *line)
+fu_linux_swap_strip_spaces(const gchar *line)
 {
 	GString *str = g_string_new(NULL);
 	for (guint i = 0; line[i] != '\0' && !g_ascii_isspace(line[i]); i++)
@@ -112,8 +110,8 @@ fu_linux_swap_new(const gchar *buf, gsize bufsz, GError **error)
 			/* split */
 			if (g_utf8_strlen(lines[i], -1) < 45)
 				continue;
-			fn = fu_strdup_nospaces(lines[i]);
-			ty = fu_strdup_nospaces(lines[i] + 40);
+			fn = fu_linux_swap_strip_spaces(lines[i]);
+			ty = fu_linux_swap_strip_spaces(lines[i] + 40);
 
 			/* partition, so use UDisks to see if backed by crypto */
 			if (g_strcmp0(ty, "partition") == 0) {
@@ -121,8 +119,15 @@ fu_linux_swap_new(const gchar *buf, gsize bufsz, GError **error)
 				if (!fu_linux_swap_verify_partition(self, fn, error))
 					return NULL;
 			} else if (g_strcmp0(ty, "file") == 0) {
+				g_autofree gchar *base = NULL;
+				g_autofree gchar *path = NULL;
+
+				/* get the path to the file */
+				base = fu_path_from_kind(FU_PATH_KIND_HOSTFS_ROOT);
+				path = g_build_filename(base, fn, NULL);
+
 				self->enabled_cnt++;
-				if (!fu_linux_swap_verify_file(self, fn, error))
+				if (!fu_linux_swap_verify_file(self, path, error))
 					return NULL;
 			} else {
 				g_warning("unknown swap type: %s [%s]", ty, fn);

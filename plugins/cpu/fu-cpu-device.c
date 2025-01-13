@@ -1,12 +1,14 @@
 /*
- * Copyright (C) 2019 Mario Limonciello <mario.limonciello@dell.com>
+ * Copyright 2019 Mario Limonciello <mario.limonciello@dell.com>
  *
- * SPDX-License-Identifier: GPL-2+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #include "config.h"
 
-#include <fwupdplugin.h>
+#ifdef HAVE_UTSNAME_H
+#include <sys/utsname.h>
+#endif
 
 #include "fu-cpu-device.h"
 
@@ -35,22 +37,22 @@ static void
 fu_cpu_device_to_string(FuDevice *device, guint idt, GString *str)
 {
 	FuCpuDevice *self = FU_CPU_DEVICE(device);
-	fu_string_append_kb(str,
-			    idt,
-			    "HasSHSTK",
-			    fu_cpu_device_has_flag(self, FU_CPU_DEVICE_FLAG_SHSTK));
-	fu_string_append_kb(str,
-			    idt,
-			    "HasIBT",
-			    fu_cpu_device_has_flag(self, FU_CPU_DEVICE_FLAG_IBT));
-	fu_string_append_kb(str,
-			    idt,
-			    "HasTME",
-			    fu_cpu_device_has_flag(self, FU_CPU_DEVICE_FLAG_TME));
-	fu_string_append_kb(str,
-			    idt,
-			    "HasSMAP",
-			    fu_cpu_device_has_flag(self, FU_CPU_DEVICE_FLAG_SMAP));
+	fwupd_codec_string_append_bool(str,
+				       idt,
+				       "HasSHSTK",
+				       fu_cpu_device_has_flag(self, FU_CPU_DEVICE_FLAG_SHSTK));
+	fwupd_codec_string_append_bool(str,
+				       idt,
+				       "HasIBT",
+				       fu_cpu_device_has_flag(self, FU_CPU_DEVICE_FLAG_IBT));
+	fwupd_codec_string_append_bool(str,
+				       idt,
+				       "HasTME",
+				       fu_cpu_device_has_flag(self, FU_CPU_DEVICE_FLAG_TME));
+	fwupd_codec_string_append_bool(str,
+				       idt,
+				       "HasSMAP",
+				       fu_cpu_device_has_flag(self, FU_CPU_DEVICE_FLAG_SMAP));
 }
 
 static const gchar *
@@ -112,8 +114,8 @@ fu_cpu_device_convert_vendor(const gchar *vendor)
 static void
 fu_cpu_device_init(FuCpuDevice *self)
 {
-	fu_device_add_instance_id_full(FU_DEVICE(self), "cpu", FU_DEVICE_INSTANCE_FLAG_VISIBLE);
 	fu_device_add_flag(FU_DEVICE(self), FWUPD_DEVICE_FLAG_INTERNAL);
+	fu_device_add_private_flag(FU_DEVICE(self), FU_DEVICE_PRIVATE_FLAG_HOST_CPU);
 	fu_device_add_icon(FU_DEVICE(self), "computer");
 	fu_device_set_version_format(FU_DEVICE(self), FWUPD_VERSION_FORMAT_HEX);
 	fu_device_set_physical_id(FU_DEVICE(self), "cpu:0");
@@ -151,7 +153,13 @@ fu_cpu_device_add_instance_ids(FuDevice *device, GError **error)
 	fu_device_add_instance_u8(device, "FAM", family_id);
 	fu_device_add_instance_u8(device, "MOD", model_id);
 	fu_device_add_instance_u4(device, "STP", stepping_id);
-	fu_device_build_instance_id(device, NULL, "CPUID", "PRO", "FAM", NULL);
+	fu_device_build_instance_id_full(device,
+					 FU_DEVICE_INSTANCE_FLAG_QUIRKS,
+					 NULL,
+					 "CPUID",
+					 "PRO",
+					 "FAM",
+					 NULL);
 	fu_device_build_instance_id(device, NULL, "CPUID", "PRO", "FAM", "MOD", NULL);
 	fu_device_build_instance_id(device, NULL, "CPUID", "PRO", "FAM", "MOD", "STP", NULL);
 
@@ -266,10 +274,14 @@ fu_cpu_device_probe_extended_features(FuDevice *device, GError **error)
 		self->flags |= FU_CPU_DEVICE_FLAG_SMAP;
 	if ((ecx >> 7) & 0x1)
 		self->flags |= FU_CPU_DEVICE_FLAG_SHSTK;
-	if ((ecx >> 13) & 0x1)
-		self->flags |= FU_CPU_DEVICE_FLAG_TME;
-	if ((edx >> 20) & 0x1)
-		self->flags |= FU_CPU_DEVICE_FLAG_IBT;
+
+	if (fu_cpu_get_vendor() == FU_CPU_VENDOR_INTEL) {
+		if ((ecx >> 13) & 0x1)
+			self->flags |= FU_CPU_DEVICE_FLAG_TME;
+		if ((edx >> 20) & 0x1)
+			self->flags |= FU_CPU_DEVICE_FLAG_IBT;
+	}
+
 	return TRUE;
 }
 
@@ -292,74 +304,98 @@ fu_cpu_device_set_quirk_kv(FuDevice *device, const gchar *key, const gchar *valu
 {
 	if (g_strcmp0(key, "PciBcrAddr") == 0) {
 		guint64 tmp = 0;
-		if (!fu_strtoull(value, &tmp, 0, G_MAXUINT32, error))
+		if (!fu_strtoull(value, &tmp, 0, G_MAXUINT32, FU_INTEGER_BASE_AUTO, error))
 			return FALSE;
 		fu_device_set_metadata_integer(device, "PciBcrAddr", tmp);
 		return TRUE;
 	}
-	g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED, "no supported");
+	if (g_strcmp0(key, "CpuMitigationsRequired") == 0) {
+		fu_device_set_metadata(device, "CpuMitigationsRequired", value);
+		return TRUE;
+	}
+	if (g_strcmp0(key, "CpuSinkcloseMicrocodeVersion") == 0) {
+		guint64 tmp = 0;
+		if (!fu_strtoull(value, &tmp, 0, G_MAXUINT32, FU_INTEGER_BASE_16, error))
+			return FALSE;
+		fu_device_set_metadata_integer(device,
+					       FU_DEVICE_METADATA_CPU_SINKCLOSE_MICROCODE_VER,
+					       tmp);
+		return TRUE;
+	}
+	g_set_error_literal(error, FWUPD_ERROR, FWUPD_ERROR_NOT_SUPPORTED, "no supported");
 	return FALSE;
 }
 
 static void
-fu_cpu_device_add_security_attrs_intel_cet_enabled(FuCpuDevice *self, FuSecurityAttrs *attrs)
+fu_cpu_device_add_security_attrs_cet_enabled(FuCpuDevice *self, FuSecurityAttrs *attrs)
 {
 	g_autoptr(FwupdSecurityAttr) attr = NULL;
 
 	/* create attr */
-	attr =
-	    fu_device_security_attr_new(FU_DEVICE(self), FWUPD_SECURITY_ATTR_ID_INTEL_CET_ENABLED);
+	attr = fu_device_security_attr_new(FU_DEVICE(self), FWUPD_SECURITY_ATTR_ID_CET_ENABLED);
+	fwupd_security_attr_set_result_success(attr, FWUPD_SECURITY_ATTR_RESULT_SUPPORTED);
 	fu_security_attrs_append(attrs, attr);
 
-	/* check for CET */
-	if (!fu_cpu_device_has_flag(self, FU_CPU_DEVICE_FLAG_SHSTK) ||
-	    !fu_cpu_device_has_flag(self, FU_CPU_DEVICE_FLAG_IBT)) {
-		fwupd_security_attr_set_result(attr, FWUPD_SECURITY_ATTR_RESULT_NOT_SUPPORTED);
-		return;
+	switch (fu_cpu_get_vendor()) {
+	case FU_CPU_VENDOR_INTEL:
+		if (fu_cpu_device_has_flag(self, FU_CPU_DEVICE_FLAG_SHSTK) &&
+		    fu_cpu_device_has_flag(self, FU_CPU_DEVICE_FLAG_IBT)) {
+			fwupd_security_attr_add_flag(attr, FWUPD_SECURITY_ATTR_FLAG_SUCCESS);
+			return;
+		}
+		break;
+	case FU_CPU_VENDOR_AMD:
+		if (fu_cpu_device_has_flag(self, FU_CPU_DEVICE_FLAG_SHSTK)) {
+			fwupd_security_attr_add_flag(attr, FWUPD_SECURITY_ATTR_FLAG_SUCCESS);
+			return;
+		}
+		break;
+	default:
+		break;
 	}
 
-	/* success */
-	fwupd_security_attr_add_flag(attr, FWUPD_SECURITY_ATTR_FLAG_SUCCESS);
-	fwupd_security_attr_set_result(attr, FWUPD_SECURITY_ATTR_RESULT_ENABLED);
+	fwupd_security_attr_set_result(attr, FWUPD_SECURITY_ATTR_RESULT_NOT_SUPPORTED);
 }
 
 static void
-fu_cpu_device_add_security_attrs_intel_cet_active(FuCpuDevice *self, FuSecurityAttrs *attrs)
+fu_cpu_device_add_security_attrs_cet_active(FuCpuDevice *self, FuSecurityAttrs *attrs)
 {
 	gint exit_status = 0xff;
 	g_autofree gchar *toolfn = NULL;
+	g_autofree gchar *dir = NULL;
 	g_autoptr(FwupdSecurityAttr) attr = NULL;
+	g_autoptr(FwupdSecurityAttr) cet_plat_attr = NULL;
 	g_autoptr(GError) error_local = NULL;
 
 	/* check for CET */
-	if (!fu_cpu_device_has_flag(self, FU_CPU_DEVICE_FLAG_SHSTK) ||
-	    !fu_cpu_device_has_flag(self, FU_CPU_DEVICE_FLAG_IBT))
+	cet_plat_attr =
+	    fu_security_attrs_get_by_appstream_id(attrs, FWUPD_SECURITY_ATTR_ID_CET_ENABLED, NULL);
+	if (cet_plat_attr == NULL)
+		return;
+	if (!fwupd_security_attr_has_flag(cet_plat_attr, FWUPD_SECURITY_ATTR_FLAG_SUCCESS))
 		return;
 
 	/* create attr */
-	attr =
-	    fu_device_security_attr_new(FU_DEVICE(self), FWUPD_SECURITY_ATTR_ID_INTEL_CET_ACTIVE);
+	attr = fu_device_security_attr_new(FU_DEVICE(self), FWUPD_SECURITY_ATTR_ID_CET_ACTIVE);
 	fwupd_security_attr_add_flag(attr, FWUPD_SECURITY_ATTR_FLAG_RUNTIME_ISSUE);
+	fwupd_security_attr_set_result_success(attr, FWUPD_SECURITY_ATTR_RESULT_SUPPORTED);
 	fu_security_attrs_append(attrs, attr);
 
 	/* check that userspace has been compiled for CET support */
-	toolfn = g_build_filename(FWUPD_LIBEXECDIR, "fwupd", "fwupd-detect-cet", NULL);
+	dir = fu_path_from_kind(FU_PATH_KIND_LIBEXECDIR_PKG);
+	toolfn = g_build_filename(dir, "fwupd-detect-cet", NULL);
 	if (!g_spawn_command_line_sync(toolfn, NULL, NULL, &exit_status, &error_local)) {
 		g_warning("failed to test CET: %s", error_local->message);
 		return;
 	}
-#if GLIB_CHECK_VERSION(2, 69, 2)
 	if (!g_spawn_check_wait_status(exit_status, &error_local)) {
-#else
-	if (!g_spawn_check_exit_status(exit_status, &error_local)) {
-#endif
 		g_debug("CET does not function, not supported: %s", error_local->message);
 		fwupd_security_attr_set_result(attr, FWUPD_SECURITY_ATTR_RESULT_NOT_SUPPORTED);
+		return;
 	}
 
 	/* success */
 	fwupd_security_attr_add_flag(attr, FWUPD_SECURITY_ATTR_FLAG_SUCCESS);
-	fwupd_security_attr_set_result(attr, FWUPD_SECURITY_ATTR_RESULT_SUPPORTED);
 }
 
 static void
@@ -369,6 +405,7 @@ fu_cpu_device_add_security_attrs_intel_tme(FuCpuDevice *self, FuSecurityAttrs *a
 
 	/* create attr */
 	attr = fu_device_security_attr_new(FU_DEVICE(self), FWUPD_SECURITY_ATTR_ID_ENCRYPTED_RAM);
+	fwupd_security_attr_set_result_success(attr, FWUPD_SECURITY_ATTR_RESULT_ENABLED);
 	fu_security_attrs_append(attrs, attr);
 
 	/* check for TME */
@@ -379,16 +416,16 @@ fu_cpu_device_add_security_attrs_intel_tme(FuCpuDevice *self, FuSecurityAttrs *a
 
 	/* success */
 	fwupd_security_attr_add_flag(attr, FWUPD_SECURITY_ATTR_FLAG_SUCCESS);
-	fwupd_security_attr_set_result(attr, FWUPD_SECURITY_ATTR_RESULT_ENABLED);
 }
 
 static void
-fu_cpu_device_add_security_attrs_intel_smap(FuCpuDevice *self, FuSecurityAttrs *attrs)
+fu_cpu_device_add_security_attrs_smap(FuCpuDevice *self, FuSecurityAttrs *attrs)
 {
 	g_autoptr(FwupdSecurityAttr) attr = NULL;
 
 	/* create attr */
-	attr = fu_device_security_attr_new(FU_DEVICE(self), FWUPD_SECURITY_ATTR_ID_INTEL_SMAP);
+	attr = fu_device_security_attr_new(FU_DEVICE(self), FWUPD_SECURITY_ATTR_ID_SMAP);
+	fwupd_security_attr_set_result_success(attr, FWUPD_SECURITY_ATTR_RESULT_ENABLED);
 	fu_security_attrs_append(attrs, attr);
 
 	/* check for SMEP and SMAP */
@@ -399,51 +436,53 @@ fu_cpu_device_add_security_attrs_intel_smap(FuCpuDevice *self, FuSecurityAttrs *
 
 	/* success */
 	fwupd_security_attr_add_flag(attr, FWUPD_SECURITY_ATTR_FLAG_SUCCESS);
-	fwupd_security_attr_set_result(attr, FWUPD_SECURITY_ATTR_RESULT_ENABLED);
 }
 
 static void
-fu_cpu_device_add_supported_cpu_attribute(FuCpuDevice *self, FuSecurityAttrs *attrs)
+fu_cpu_device_add_x86_64_security_attrs(FuDevice *device, FuSecurityAttrs *attrs)
 {
-	g_autoptr(FwupdSecurityAttr) attr = NULL;
+	FuCpuDevice *self = FU_CPU_DEVICE(device);
 
-	attr = fu_device_security_attr_new(FU_DEVICE(self), FWUPD_SECURITY_ATTR_ID_SUPPORTED_CPU);
-	switch (fu_cpu_get_vendor()) {
-	case FU_CPU_VENDOR_INTEL:
-	case FU_CPU_VENDOR_AMD:
-		fwupd_security_attr_add_flag(attr, FWUPD_SECURITY_ATTR_FLAG_SUCCESS);
-		fwupd_security_attr_set_result(attr, FWUPD_SECURITY_ATTR_RESULT_VALID);
-		break;
-	default:
-		fwupd_security_attr_add_flag(attr, FWUPD_SECURITY_ATTR_FLAG_MISSING_DATA);
-	}
-	fu_security_attrs_append(attrs, attr);
+	/* only Intel */
+	if (fu_cpu_get_vendor() == FU_CPU_VENDOR_INTEL)
+		fu_cpu_device_add_security_attrs_intel_tme(self, attrs);
+	fu_cpu_device_add_security_attrs_cet_enabled(self, attrs);
+	fu_cpu_device_add_security_attrs_cet_active(self, attrs);
+	fu_cpu_device_add_security_attrs_smap(self, attrs);
 }
 
 static void
 fu_cpu_device_add_security_attrs(FuDevice *device, FuSecurityAttrs *attrs)
 {
-	FuCpuDevice *self = FU_CPU_DEVICE(device);
+#ifdef HAVE_UTSNAME_H
+	struct utsname name_tmp;
 
-	/* only Intel */
-	if (fu_cpu_get_vendor() == FU_CPU_VENDOR_INTEL) {
-		fu_cpu_device_add_security_attrs_intel_cet_enabled(self, attrs);
-		fu_cpu_device_add_security_attrs_intel_cet_active(self, attrs);
-		fu_cpu_device_add_security_attrs_intel_tme(self, attrs);
-		fu_cpu_device_add_security_attrs_intel_smap(self, attrs);
+	memset(&name_tmp, 0, sizeof(struct utsname));
+	if (uname(&name_tmp) < 0) {
+		g_warning("failed to read CPU architecture");
+		return;
 	}
 
-	fu_cpu_device_add_supported_cpu_attribute(self, attrs);
+	if (g_strcmp0(name_tmp.machine, "x86_64") == 0)
+		fu_cpu_device_add_x86_64_security_attrs(device, attrs);
+#endif
+}
+
+static gchar *
+fu_cpu_device_convert_version(FuDevice *device, guint64 version_raw)
+{
+	return fu_version_from_uint32(version_raw, fu_device_get_version_format(device));
 }
 
 static void
 fu_cpu_device_class_init(FuCpuDeviceClass *klass)
 {
-	FuDeviceClass *klass_device = FU_DEVICE_CLASS(klass);
-	klass_device->to_string = fu_cpu_device_to_string;
-	klass_device->probe = fu_cpu_device_probe;
-	klass_device->set_quirk_kv = fu_cpu_device_set_quirk_kv;
-	klass_device->add_security_attrs = fu_cpu_device_add_security_attrs;
+	FuDeviceClass *device_class = FU_DEVICE_CLASS(klass);
+	device_class->to_string = fu_cpu_device_to_string;
+	device_class->probe = fu_cpu_device_probe;
+	device_class->set_quirk_kv = fu_cpu_device_set_quirk_kv;
+	device_class->add_security_attrs = fu_cpu_device_add_security_attrs;
+	device_class->convert_version = fu_cpu_device_convert_version;
 }
 
 FuCpuDevice *

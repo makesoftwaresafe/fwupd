@@ -34,7 +34,7 @@ modified to suit.
 First, lets verify that an existing firmware binary and metainfo file without a Jcat signature
 refuses to install when packaged into a cabinet archive:
 
-    $ gcab -c firmware.cab firmware.bin firmware.metainfo.xml 
+    $ fwupdtool build-cabinet firmware.cab firmware.bin firmware.metainfo.xml
     $ fwupdmgr install firmware.cab --allow-reinstall
     Decompressing…           [ -                                     ]
     firmware signature missing or not trusted; set OnlyTrusted=false in /etc/fwupd/fwupd.conf ONLY if you are a firmware developer
@@ -85,7 +85,7 @@ Lets now use the signed user key to create a Jcat file and also add a SHA256 che
 
 We can then create the new firmware archive, this time with the self-signed Jcat file as well.
 
-    gcab -c firmware.cab firmware.bin firmware.metainfo.xml firmware.jcat 
+    fwupdtool build-cabinet firmware.cab firmware.bin firmware.metainfo.xml firmware.jcat
 
 Now we need to install the **CA** certificate to the system-wide system store.
 If fwupd is running in a prefix then you need to use that instead, e.g. `/home/emily/root/etc/pki/fwupd/`.
@@ -108,3 +108,15 @@ secure or practical -- or how fwupd and LVFS were designed to be used. So please
 
 That said, if a vendor included the `.jcat` in the firmware cabinet archive, the LVFS will
 **append** its own signature rather than replace it -- which may make testing the archive easier.
+
+## Debugging
+
+Using `sudo fwupdtool get-details firmware.cab --verbose --verbose` should indicate why the
+certificate isn't being trusted, e.g.
+
+    FuCabinet            processing file: firmware.metainfo.xml
+    FuCabinet            processing release: 1.2.3
+    FuCabinet            failed to verify payload firmware.bin: checksums were required, but none supplied
+
+This indicates that the `jcat-tool self-sign firmware.jcat firmware.bin --kind sha256` step was
+missed as the JCat file does not have any supported checksums.

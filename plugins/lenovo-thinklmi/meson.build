@@ -1,6 +1,6 @@
-if get_option('plugin_uefi_capsule').disable_auto_if(host_machine.system() != 'linux').allowed()
-
+if allow_uefi_capsule
 cargs = ['-DG_LOG_DOMAIN="FuPluginLenovoThinkLmi"']
+plugins += {meson.current_source_dir().split('/')[-1]: true}
 
 plugin_builtin_lenovo_thinklmi = static_library('fu_plugin_lenovo_thinklmi',
   sources: [
@@ -15,7 +15,7 @@ plugin_builtin_lenovo_thinklmi = static_library('fu_plugin_lenovo_thinklmi',
 )
 plugin_builtins += plugin_builtin_lenovo_thinklmi
 
-if get_option('tests') and efiboot.found() and efivar.found()
+if get_option('tests')
   env = environment()
   env.set('G_TEST_SRCDIR', meson.current_source_dir())
   env.set('G_TEST_BUILDDIR', meson.current_build_dir())

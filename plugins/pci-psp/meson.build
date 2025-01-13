@@ -1,5 +1,6 @@
 if hsi and (host_cpu == 'x86' or host_cpu == 'x86_64')
 cargs = ['-DG_LOG_DOMAIN="FuPluginPciPsp"']
+plugins += {meson.current_source_dir().split('/')[-1]: true}
 
 plugin_quirks += files('pci-psp.quirk')
 plugin_builtins += static_library('fu_plugin_pci_psp',
@@ -12,4 +13,5 @@ plugin_builtins += static_library('fu_plugin_pci_psp',
   c_args: cargs,
   dependencies: plugin_deps,
 )
+umockdev_tests += files('pci_psp_test.py')
 endif

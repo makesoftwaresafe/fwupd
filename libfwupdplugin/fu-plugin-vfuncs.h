@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2016 Richard Hughes <richard@hughsie.com>
+ * Copyright 2016 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #pragma once
@@ -17,4 +17,4 @@
  * Since: 1.7.2
  **/
 void
-fu_plugin_init_vfuncs(FuPluginVfuncs *vfuncs);
+fu_plugin_init_vfuncs(FuPluginVfuncs *vfuncs) G_GNUC_NON_NULL(1);

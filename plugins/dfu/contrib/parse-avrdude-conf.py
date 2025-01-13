@@ -1,5 +1,8 @@
-#!/usr/bin/python3
-# SPDX-License-Identifier: LGPL-2.1+
+#!/usr/bin/env python3
+#
+# Copyright 2017 Richard Hughes <richard@hughsie.com>
+#
+# SPDX-License-Identifier: LGPL-2.1-or-later
 
 """ This parses avrdude.conf and generates quirks for fwupd """
 
@@ -7,6 +10,7 @@
 
 import sys
 from difflib import SequenceMatcher
+
 
 # finds a part using the ID
 def _find_part_by_id(parts, part_id):
@@ -43,7 +47,6 @@ def _parse_parts(fn_source):
     parts = []
 
     for line in open(fn_source).readlines():
-
         # try to clean up crazy syntax
         line = line.replace("\n", "")
         if line.endswith(";"):
@@ -113,7 +116,6 @@ def _write_quirks(parts, fn_destination):
     results = {}
 
     for part in parts:
-
         # ignore meta parts with deprecated names
         if "desc" not in part:
             continue
@@ -125,7 +127,7 @@ def _write_quirks(parts, fn_destination):
         if not mem_part:
             print("no memory layout for", part["desc"])
             continue
-        if not "size" in mem_part:
+        if "size" not in mem_part:
             print("no memory size for", part["desc"])
             continue
         if mem_part["size"].startswith("0x"):
@@ -151,7 +153,7 @@ def _write_quirks(parts, fn_destination):
     for chip_id in results:
         result = results[chip_id]
         outp.append(
-            "# " + result["desc"] + "	[USER]		USER=0x%x" % result["size"] + "\n"
+            "# " + result["desc"] + f"\t[USER]\t\tUSER=0x{result['size']:x}" + "\n"
         )
         outp.append(chip_id + "=" + result["mem_layout"] + "\n\n")
 
@@ -162,7 +164,7 @@ def _write_quirks(parts, fn_destination):
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        print("USAGE: %s avrdude.conf tmp.quirk" % sys.argv[0])
+        print(f"USAGE: {sys.argv[0]} avrdude.conf tmp.quirk")
         sys.exit(1)
 
     all_parts = _parse_parts(sys.argv[1])

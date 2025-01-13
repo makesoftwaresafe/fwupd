@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018 Dell Inc.
+ * Copyright 2018 Dell Inc.
  * All rights reserved.
  *
  * This software and associated documentation (if any) is furnished
@@ -10,7 +10,7 @@
  * redistributing this file, you may do so under either license.
  * Dell Chooses the MIT license part of Dual MIT/LGPLv2 license agreement.
  *
- * SPDX-License-Identifier: LGPL-2.1+ OR MIT
+ * SPDX-License-Identifier: LGPL-2.1-or-later OR MIT
  */
 
 #include "config.h"
@@ -62,7 +62,6 @@ fu_dell_dock_status_write(FuDevice *device,
 			  GError **error)
 {
 	FuDellDockStatus *self = FU_DELL_DOCK_STATUS(device);
-	FuDevice *parent;
 	gsize length = 0;
 	guint32 status_version = 0;
 	const guint8 *data;
@@ -89,8 +88,7 @@ fu_dell_dock_status_write(FuDevice *device,
 	dynamic_version = fu_dell_dock_status_ver_string(status_version);
 	g_info("writing status firmware version %s", dynamic_version);
 
-	parent = fu_device_get_parent(device);
-	if (!fu_dell_dock_ec_commit_package(parent, fw, error))
+	if (!fu_dell_dock_ec_commit_package(fu_device_get_proxy(device), fw, error))
 		return FALSE;
 
 	/* dock will reboot to re-read; this is to appease the daemon */
@@ -102,19 +100,24 @@ fu_dell_dock_status_write(FuDevice *device,
 static gboolean
 fu_dell_dock_status_open(FuDevice *device, GError **error)
 {
-	FuDevice *parent = fu_device_get_parent(device);
-
-	g_return_val_if_fail(parent != NULL, FALSE);
-
-	return fu_device_open(parent, error);
+	if (fu_device_get_proxy(device) == NULL) {
+		if (fu_device_get_parent(device) == NULL) {
+			g_set_error_literal(error, FWUPD_ERROR, FWUPD_ERROR_INTERNAL, "no parent");
+			return FALSE;
+		}
+		fu_device_set_proxy(device, fu_device_get_parent(device));
+	}
+	return fu_device_open(fu_device_get_proxy(device), error);
 }
 
 static gboolean
 fu_dell_dock_status_close(FuDevice *device, GError **error)
 {
-	FuDevice *parent = fu_device_get_parent(device);
-
-	return fu_device_close(parent, error);
+	if (fu_device_get_proxy(device) == NULL) {
+		g_set_error_literal(error, FWUPD_ERROR, FWUPD_ERROR_INTERNAL, "no proxy");
+		return FALSE;
+	}
+	return fu_device_close(fu_device_get_proxy(device), error);
 }
 
 static gboolean
@@ -126,21 +129,18 @@ fu_dell_dock_status_set_quirk_kv(FuDevice *device,
 	FuDellDockStatus *self = FU_DELL_DOCK_STATUS(device);
 	if (g_strcmp0(key, "DellDockBlobVersionOffset") == 0) {
 		guint64 tmp = 0;
-		if (!fu_strtoull(value, &tmp, 0, G_MAXUINT32, error))
+		if (!fu_strtoull(value, &tmp, 0, G_MAXUINT32, FU_INTEGER_BASE_AUTO, error))
 			return FALSE;
 		self->blob_version_offset = tmp;
 		return TRUE;
 	}
 
 	/* failed */
-	g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED, "quirk key not supported");
+	g_set_error_literal(error,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_NOT_SUPPORTED,
+			    "quirk key not supported");
 	return FALSE;
-}
-
-static void
-fu_dell_dock_status_finalize(GObject *object)
-{
-	G_OBJECT_CLASS(fu_dell_dock_status_parent_class)->finalize(object);
 }
 
 static void
@@ -164,15 +164,13 @@ fu_dell_dock_status_init(FuDellDockStatus *self)
 static void
 fu_dell_dock_status_class_init(FuDellDockStatusClass *klass)
 {
-	GObjectClass *object_class = G_OBJECT_CLASS(klass);
-	FuDeviceClass *klass_device = FU_DEVICE_CLASS(klass);
-	object_class->finalize = fu_dell_dock_status_finalize;
-	klass_device->write_firmware = fu_dell_dock_status_write;
-	klass_device->setup = fu_dell_dock_status_setup;
-	klass_device->open = fu_dell_dock_status_open;
-	klass_device->close = fu_dell_dock_status_close;
-	klass_device->set_quirk_kv = fu_dell_dock_status_set_quirk_kv;
-	klass_device->set_progress = fu_dell_dock_status_set_progress;
+	FuDeviceClass *device_class = FU_DEVICE_CLASS(klass);
+	device_class->write_firmware = fu_dell_dock_status_write;
+	device_class->setup = fu_dell_dock_status_setup;
+	device_class->open = fu_dell_dock_status_open;
+	device_class->close = fu_dell_dock_status_close;
+	device_class->set_quirk_kv = fu_dell_dock_status_set_quirk_kv;
+	device_class->set_progress = fu_dell_dock_status_set_progress;
 }
 
 FuDellDockStatus *

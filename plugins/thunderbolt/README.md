@@ -106,11 +106,15 @@ at the end so the format is "TBT-vvvvdddd-native".
 
 This plugin uses the following plugin-specific quirks:
 
-### Flags=retimer-offline-mode
+### `Flags=retimer-offline-mode`
 
 Use offline mode interface to update retimers.
 
 Since: 1.9.1
+
+### `Flags=force-enumeration`
+
+Forces composite device components to be enumerated.
 
 ## External Interface Access
 
@@ -119,3 +123,25 @@ This plugin requires read/write access to `/sys/bus/thunderbolt`.
 ## Version Considerations
 
 This plugin has been available since fwupd version `0.8.0`.
+
+## Data Flow
+
+```mermaid
+  flowchart LR
+      subgraph Thunderbolt Controller
+        controller(TBT/USB4)
+        TBT_SPI[(SPI)]
+      end
+      subgraph Kernel
+        thunderbolt(Thunderbolt\ndriver)
+      end
+      subgraph fwupd Process
+        fwupdengine(FuEngine)
+        tbt_plugin(Thunderbolt\nPlugin)
+      end
+      fwupdengine-->tbt_plugin
+      tbt_plugin<--sysfs-->thunderbolt
+      thunderbolt<--mailbox-->controller
+      controller---TBT_SPI
+      thunderbolt~~~controller
+```

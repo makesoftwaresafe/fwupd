@@ -1,12 +1,10 @@
 /*
- * Copyright (C) 2015 Richard Hughes <richard@hughsie.com>
+ * Copyright 2015 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #pragma once
-
-#include <gusb.h>
 
 #include "fu-dfu-device.h"
 #include "fu-dfu-sector.h"
@@ -24,7 +22,8 @@ fu_dfu_target_upload_chunk(FuDfuTarget *self,
 gboolean
 fu_dfu_target_download_chunk(FuDfuTarget *self,
 			     guint16 index,
-			     GBytes *bytes,
+			     GByteArray *buf,
+			     guint timeout_ms,
 			     FuProgress *progress,
 			     GError **error);
 gboolean

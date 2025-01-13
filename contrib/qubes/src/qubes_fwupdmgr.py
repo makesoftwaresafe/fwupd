@@ -1,15 +1,14 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 #
 # The Qubes OS Project, http://www.qubes-os.org
 #
-# Copyright (C) 2021  Norbert Kaminski  <norbert.kaminski@3mdeb.com>
+# Copyright 2021 Norbert Kaminski <norbert.kaminski@3mdeb.com>
 #
-# SPDX-License-Identifier: LGPL-2.1+
+# SPDX-License-Identifier: LGPL-2.1-or-later
 #
 
 import json
 import os
-import re
 import shutil
 import subprocess
 import tempfile
@@ -117,13 +116,6 @@ class QubesFwupdmgr(FwupdHeads, FwupdUpdate, FwupdReceiveUpdates):
             # actually needing refreshing
             if remote.get("Kind") != "download":
                 continue
-            # skip unsupported keyring kind
-            if remote.get("KeyringKind") not in ("jcat",):
-                print(
-                    "Skipping remote '{}' due to unsupported keyring type '{}'".format(
-                        name, remote.get("KeyringKind")
-                    )
-                )
             assert "MetadataUri" in remote
             remotes[name] = remote["MetadataUri"]
 
@@ -177,7 +169,7 @@ class QubesFwupdmgr(FwupdHeads, FwupdUpdate, FwupdReceiveUpdates):
             try:
                 self.refresh_metadata(whonix=whonix, remote_name=name, metadata_url=url)
             except Exception as e:
-                print("Failed to refresh remote '{}': {}".format(name, e))
+                print(f"Failed to refresh remote '{name}': {e}")
 
     def _get_dom0_updates(self):
         """Gathers information about available updates."""

@@ -1,12 +1,14 @@
 /*
- * Copyright (C) 2015 Richard Hughes <richard@hughsie.com>
+ * Copyright 2015 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #pragma once
 
 #include <gio/gio.h>
+
+#include "fu-dfu-struct.h"
 
 #define FU_TYPE_DFU_SECTOR (fu_dfu_sector_get_type())
 G_DECLARE_DERIVABLE_TYPE(FuDfuSector, fu_dfu_sector, FU, DFU_SECTOR, GObject)
@@ -14,24 +16,6 @@ G_DECLARE_DERIVABLE_TYPE(FuDfuSector, fu_dfu_sector, FU, DFU_SECTOR, GObject)
 struct _FuDfuSectorClass {
 	GObjectClass parent_class;
 };
-
-/**
- * FuDfuSectorCap:
- * @DFU_SECTOR_CAP_NONE:		No operations possible
- * @DFU_SECTOR_CAP_READABLE:		Sector can be read
- * @DFU_SECTOR_CAP_WRITEABLE:		Sector can be written
- * @DFU_SECTOR_CAP_ERASABLE:		Sector can be erased
- *
- * The flags indicating what the sector can do.
- **/
-typedef enum {
-	DFU_SECTOR_CAP_NONE = 0,
-	DFU_SECTOR_CAP_READABLE = 1 << 0,
-	DFU_SECTOR_CAP_WRITEABLE = 1 << 1,
-	DFU_SECTOR_CAP_ERASABLE = 1 << 2,
-	/*< private >*/
-	DFU_SECTOR_CAP_LAST
-} FuDfuSectorCap;
 
 FuDfuSector *
 fu_dfu_sector_new(guint32 address,

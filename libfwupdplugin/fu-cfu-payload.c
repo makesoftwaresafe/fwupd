@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2021 Richard Hughes <richard@hughsie.com>
+ * Copyright 2021 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #define G_LOG_DOMAIN "FuFirmware"
@@ -10,9 +10,10 @@
 
 #include "fu-byte-array.h"
 #include "fu-bytes.h"
+#include "fu-cfu-firmware-struct.h"
 #include "fu-cfu-payload.h"
-#include "fu-cfu-struct.h"
 #include "fu-common.h"
+#include "fu-input-stream.h"
 
 /**
  * FuCfuPayload:
@@ -30,27 +31,35 @@ G_DEFINE_TYPE(FuCfuPayload, fu_cfu_payload, FU_TYPE_FIRMWARE)
 
 static gboolean
 fu_cfu_payload_parse(FuFirmware *firmware,
-		     GBytes *fw,
-		     gsize offset,
+		     GInputStream *stream,
 		     FwupdInstallFlags flags,
 		     GError **error)
 {
-	gsize bufsz = 0;
-	const guint8 *buf = g_bytes_get_data(fw, &bufsz);
+	gsize offset = 0;
+	gsize streamsz = 0;
 
 	/* process into chunks */
-	while (offset < bufsz) {
+	if (!fu_input_stream_size(stream, &streamsz, error))
+		return FALSE;
+	while (offset < streamsz) {
 		guint8 chunk_size = 0;
 		g_autoptr(FuChunk) chk = NULL;
 		g_autoptr(GBytes) blob = NULL;
 		g_autoptr(GByteArray) st = NULL;
 
-		st = fu_struct_cfu_payload_parse(buf, bufsz, offset, error);
+		st = fu_struct_cfu_payload_parse_stream(stream, offset, error);
 		if (st == NULL)
 			return FALSE;
 		offset += st->len;
 		chunk_size = fu_struct_cfu_payload_get_size(st);
-		blob = fu_bytes_new_offset(fw, offset, chunk_size, error);
+		if (chunk_size == 0) {
+			g_set_error_literal(error,
+					    FWUPD_ERROR,
+					    FWUPD_ERROR_INVALID_DATA,
+					    "payload size was invalid");
+			return FALSE;
+		}
+		blob = fu_input_stream_read_bytes(stream, offset, chunk_size, NULL, error);
 		if (blob == NULL)
 			return FALSE;
 		chk = fu_chunk_bytes_new(blob);
@@ -65,7 +74,7 @@ fu_cfu_payload_parse(FuFirmware *firmware,
 	return TRUE;
 }
 
-static GBytes *
+static GByteArray *
 fu_cfu_payload_write(FuFirmware *firmware, GError **error)
 {
 	g_autoptr(GByteArray) buf = g_byte_array_new();
@@ -82,7 +91,7 @@ fu_cfu_payload_write(FuFirmware *firmware, GError **error)
 		g_byte_array_append(buf, st->data, st->len);
 		g_byte_array_append(buf, fu_chunk_get_data(chk), fu_chunk_get_data_sz(chk));
 	}
-	return g_byte_array_free_to_bytes(g_steal_pointer(&buf));
+	return g_steal_pointer(&buf);
 }
 
 static void
@@ -93,9 +102,9 @@ fu_cfu_payload_init(FuCfuPayload *self)
 static void
 fu_cfu_payload_class_init(FuCfuPayloadClass *klass)
 {
-	FuFirmwareClass *klass_firmware = FU_FIRMWARE_CLASS(klass);
-	klass_firmware->parse = fu_cfu_payload_parse;
-	klass_firmware->write = fu_cfu_payload_write;
+	FuFirmwareClass *firmware_class = FU_FIRMWARE_CLASS(klass);
+	firmware_class->parse = fu_cfu_payload_parse;
+	firmware_class->write = fu_cfu_payload_write;
 }
 
 /**

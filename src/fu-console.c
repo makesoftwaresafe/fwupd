@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2017 Richard Hughes <richard@hughsie.com>
+ * Copyright 2017 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #define G_LOG_DOMAIN "FuProgressBar"
@@ -48,16 +48,16 @@ fu_console_setup(FuConsole *self, GError **error)
 	hOut = GetStdHandle(STD_OUTPUT_HANDLE);
 	if (hOut == INVALID_HANDLE_VALUE) {
 		g_set_error(error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_NOT_SUPPORTED,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_NOT_SUPPORTED,
 			    "failed to get stdout [%u]",
 			    (guint)GetLastError());
 		return FALSE;
 	}
 	if (!GetConsoleMode(hOut, &dwMode)) {
 		g_set_error(error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_NOT_SUPPORTED,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_NOT_SUPPORTED,
 			    "failed to get mode [%u]",
 			    (guint)GetLastError());
 		return FALSE;
@@ -65,31 +65,31 @@ fu_console_setup(FuConsole *self, GError **error)
 	dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
 	if (!SetConsoleMode(hOut, dwMode)) {
 		g_set_error(error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_NOT_SUPPORTED,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_NOT_SUPPORTED,
 			    "failed to set mode [%u]",
 			    (guint)GetLastError());
 		return FALSE;
 	}
 	if (!SetConsoleOutputCP(CP_UTF8)) {
 		g_set_error(error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_NOT_SUPPORTED,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_NOT_SUPPORTED,
 			    "failed to set output UTF-8 [%u]",
 			    (guint)GetLastError());
 		return FALSE;
 	}
 	if (!SetConsoleCP(CP_UTF8)) {
 		g_set_error(error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_NOT_SUPPORTED,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_NOT_SUPPORTED,
 			    "failed to set UTF-8 [%u]",
 			    (guint)GetLastError());
 		return FALSE;
 	}
 #else
 	if (isatty(fileno(stdout)) == 0) {
-		g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED, "not a TTY");
+		g_set_error_literal(error, FWUPD_ERROR, FWUPD_ERROR_NOT_SUPPORTED, "not a TTY");
 		return FALSE;
 	}
 #endif
@@ -166,9 +166,9 @@ fu_console_input_uint(FuConsole *self, guint maxnum, const gchar *format, ...)
 		if (retval == 1 && answer <= maxnum)
 			break;
 
-		/* TRANSLATORS: the user isn't reading the question */
 		fu_console_print_full(self,
 				      FU_CONSOLE_PRINT_FLAG_NONE,
+				      /* TRANSLATORS: the user isn't reading the question */
 				      _("Please enter a number from 0 to %u: "),
 				      maxnum);
 	} while (TRUE);
@@ -203,6 +203,9 @@ fu_console_input_bool(FuConsole *self, gboolean def, const gchar *format, ...)
 			return TRUE;
 		if (g_strcmp0(buffer, "N\n") == 0)
 			return FALSE;
+
+		/* TRANSLATORS: the user isn't reading the question -- %1 is 'Y' and %2 is 'N' */
+		fu_console_print(self, _("Please enter either %s or %s: "), "Y", "N");
 	} while (TRUE);
 	return FALSE;
 }
@@ -376,6 +379,7 @@ fu_console_status_to_string(FwupdStatus status)
 		return _("Authenticating…");
 		break;
 	case FWUPD_STATUS_DEVICE_BUSY:
+	case FWUPD_STATUS_WAITING_FOR_USER:
 		/* TRANSLATORS: waiting for device to do something */
 		return _("Waiting…");
 		break;
@@ -571,6 +575,8 @@ fu_console_print(FuConsole *self, const gchar *format, ...)
 void
 fu_console_set_progress_title(FuConsole *self, const gchar *title)
 {
+	if (!self->interactive)
+		return;
 	fu_console_erase_line(self);
 	g_print("%s\n", title);
 	fu_console_refresh(self);
@@ -671,7 +677,7 @@ fu_console_set_progress(FuConsole *self, FwupdStatus status, guint percentage)
 	self->percentage = percentage;
 
 	/* dumb */
-	if (!self->interactive && percentage != 0 && status != FWUPD_STATUS_IDLE) {
+	if (!self->interactive) {
 		g_printerr("%s: %u%%\n", fu_console_status_to_string(status), percentage);
 		return;
 	}
@@ -739,6 +745,16 @@ fu_console_set_percentage_length(FuConsole *self, guint len)
 	g_return_if_fail(FU_IS_CONSOLE(self));
 	g_return_if_fail(len > 3);
 	self->length_percentage = len;
+}
+
+void
+fu_console_beep(FuConsole *self, guint count)
+{
+	for (guint i = 0; i < count; i++) {
+		if (i > 0)
+			g_usleep(250000);
+		g_print("\007");
+	}
 }
 
 static void

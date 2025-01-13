@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2020 Richard Hughes <richard@hughsie.com>
+ * Copyright 2020 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #include "config.h"
@@ -23,7 +23,7 @@ static void
 fu_logind_plugin_to_string(FuPlugin *plugin, guint idt, GString *str)
 {
 	FuLogindPlugin *self = FU_LOGIND_PLUGIN(plugin);
-	fu_string_append_kx(str, idt, "LogindFd", self->logind_fd);
+	fwupd_codec_string_append_hex(str, idt, "LogindFd", self->logind_fd);
 }
 
 static gboolean
@@ -58,11 +58,7 @@ fu_logind_plugin_startup(FuPlugin *plugin, FuProgress *progress, GError **error)
 }
 
 static gboolean
-fu_logind_plugin_prepare(FuPlugin *plugin,
-			 FuDevice *device,
-			 FuProgress *progress,
-			 FwupdInstallFlags flags,
-			 GError **error)
+fu_logind_plugin_composite_prepare(FuPlugin *plugin, GPtrArray *devices, GError **error)
 {
 	FuLogindPlugin *self = FU_LOGIND_PLUGIN(plugin);
 	g_autoptr(GError) error_local = NULL;
@@ -72,7 +68,7 @@ fu_logind_plugin_prepare(FuPlugin *plugin,
 			    "handle-hibernate-key:handle-lid-switch";
 
 	/* already inhibited */
-	if (self->logind_fd != 0)
+	if (self->logind_fd >= 0)
 		return TRUE;
 
 	/* not yet connected */
@@ -108,32 +104,29 @@ fu_logind_plugin_prepare(FuPlugin *plugin,
 }
 
 static gboolean
-fu_logind_plugin_cleanup(FuPlugin *plugin,
-			 FuDevice *device,
-			 FuProgress *progress,
-			 FwupdInstallFlags flags,
-			 GError **error)
+fu_logind_plugin_composite_cleanup(FuPlugin *plugin, GPtrArray *devices, GError **error)
 {
 	FuLogindPlugin *self = FU_LOGIND_PLUGIN(plugin);
-	if (self->logind_fd == 0)
+	if (self->logind_fd < 0)
 		return TRUE;
 	g_debug("closed logind fd %i", self->logind_fd);
 	if (!g_close(self->logind_fd, error))
 		return FALSE;
-	self->logind_fd = 0;
+	self->logind_fd = -1;
 	return TRUE;
 }
 
 static void
 fu_logind_plugin_init(FuLogindPlugin *self)
 {
+	self->logind_fd = -1;
 }
 
 static void
-fu_logind_finalize(GObject *obj)
+fu_logind_plugin_finalize(GObject *obj)
 {
 	FuLogindPlugin *self = FU_LOGIND_PLUGIN(obj);
-	if (self->logind_fd != 0)
+	if (self->logind_fd >= 0)
 		g_close(self->logind_fd, NULL);
 	if (self->logind_proxy != NULL)
 		g_object_unref(self->logind_proxy);
@@ -146,9 +139,9 @@ fu_logind_plugin_class_init(FuLogindPluginClass *klass)
 	FuPluginClass *plugin_class = FU_PLUGIN_CLASS(klass);
 	GObjectClass *object_class = G_OBJECT_CLASS(klass);
 
-	object_class->finalize = fu_logind_finalize;
+	object_class->finalize = fu_logind_plugin_finalize;
 	plugin_class->to_string = fu_logind_plugin_to_string;
 	plugin_class->startup = fu_logind_plugin_startup;
-	plugin_class->cleanup = fu_logind_plugin_cleanup;
-	plugin_class->prepare = fu_logind_plugin_prepare;
+	plugin_class->composite_cleanup = fu_logind_plugin_composite_cleanup;
+	plugin_class->composite_prepare = fu_logind_plugin_composite_prepare;
 }

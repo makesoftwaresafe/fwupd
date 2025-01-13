@@ -1,15 +1,12 @@
 /*
- * Copyright (C) 2015 Richard Hughes <richard@hughsie.com>
+ * Copyright 2015 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #pragma once
 
 #include <gio/gio.h>
-#ifdef HAVE_GUSB
-#include <gusb.h>
-#endif
 
 #include "fu-bluez-device.h"
 #include "fu-common-guid.h"
@@ -20,14 +17,7 @@
 #include "fu-plugin.h"
 #include "fu-quirks.h"
 #include "fu-security-attrs.h"
-#include "fu-usb-device.h"
 #include "fu-version-common.h"
-//#include "fu-hid-device.h"
-#ifdef HAVE_GUDEV
-#include "fu-udev-device.h"
-#endif
-#include <libfwupd/fwupd-common.h>
-#include <libfwupd/fwupd-plugin.h>
 
 /* only until HSI is declared stable */
 #include "fwupd-security-attr-private.h"
@@ -100,6 +90,23 @@ struct _FuPluginClass {
 	 * Since: 1.7.2
 	 **/
 	gboolean (*startup)(FuPlugin *self, FuProgress *progress, GError **error);
+	/**
+	 * ready:
+	 * @self: a #FuPlugin
+	 * @progress: a #FuProgress
+	 * @error: (nullable): optional return location for an error
+	 *
+	 * Tells the plugin that all devices have been coldplugged and the plugin is
+	 * ready to be used.
+	 *
+	 * Returns: TRUE for success or FALSE for failure.
+	 *
+	 * NOTE: Any plugins not intended for the system or that have failure communicating
+	 * with the device should return %FALSE and set @error.
+	 *
+	 * Since: 1.9.6
+	 **/
+	gboolean (*ready)(FuPlugin *self, FuProgress *progress, GError **error);
 	/**
 	 * coldplug:
 	 * @self: a #FuPlugin
@@ -232,7 +239,7 @@ struct _FuPluginClass {
 	 * write_firmware:
 	 * @self: a #FuPlugin
 	 * @dev: a device
-	 * @blob_fw: a data blob
+	 * @stream: a #GInputStream
 	 * @progress: a #FuProgress
 	 * @flags: install flags
 	 * @error: (nullable): optional return location for an error
@@ -243,7 +250,7 @@ struct _FuPluginClass {
 	 **/
 	gboolean (*write_firmware)(FuPlugin *self,
 				   FuDevice *device,
-				   GBytes *blob_fw,
+				   GInputStream *stream,
 				   FuProgress *progress,
 				   FwupdInstallFlags flags,
 				   GError **error);
@@ -372,6 +379,56 @@ struct _FuPluginClass {
 	 * Since: 1.8.4
 	 **/
 	void (*to_string)(FuPlugin *self, guint idt, GString *str);
+	/**
+	 * fix_host_security_attr:
+	 * @self: a #FuPlugin
+	 * @attr: a #FwupdSecurityAttr
+	 * @error: (nullable): optional return location for an error
+	 *
+	 * Fix a host security issue.
+	 *
+	 * Since: 1.9.6
+	 **/
+	gboolean (*fix_host_security_attr)(FuPlugin *self, FwupdSecurityAttr *attr, GError **error);
+	/**
+	 * undo_host_security_attr:
+	 * @self: a #FuPlugin
+	 * @attr: a #FwupdSecurityAttr
+	 * @error: (nullable): optional return location for an error
+	 *
+	 * Undo the fix for a host security issue.
+	 *
+	 * Since: 1.9.6
+	 **/
+	gboolean (*undo_host_security_attr)(FuPlugin *self,
+					    FwupdSecurityAttr *attr,
+					    GError **error);
+	/**
+	 * reboot_cleanup:
+	 * @self: a #FuPlugin
+	 * @device: a device
+	 * @error: (nullable): optional return location for an error
+	 *
+	 * Performs cleanup actions after the reboot has been performed.
+	 *
+	 * Since: 1.9.7
+	 **/
+	gboolean (*reboot_cleanup)(FuPlugin *self, FuDevice *device, GError **error);
+	/**
+	 * modify_config:
+	 * @self: a #FuPlugin
+	 * @key: a config key
+	 * @value: a config value
+	 * @error: (nullable): optional return location for an error
+	 *
+	 * Sets a plugin config option, which may be allow-listed or value-checked.
+	 *
+	 * Since: 2.0.0
+	 **/
+	gboolean (*modify_config)(FuPlugin *self,
+				  const gchar *key,
+				  const gchar *value,
+				  GError **error);
 };
 
 /**
@@ -413,44 +470,55 @@ typedef struct FuPluginData FuPluginData;
 
 /* for plugins to use */
 const gchar *
-fu_plugin_get_name(FuPlugin *self);
+fu_plugin_get_name(FuPlugin *self) G_GNUC_NON_NULL(1);
 void
-fu_plugin_set_name(FuPlugin *self, const gchar *name);
+fu_plugin_set_name(FuPlugin *self, const gchar *name) G_GNUC_NON_NULL(1);
 FuPluginData *
-fu_plugin_get_data(FuPlugin *self);
+fu_plugin_get_data(FuPlugin *self) G_GNUC_NON_NULL(1);
 FuPluginData *
-fu_plugin_alloc_data(FuPlugin *self, gsize data_sz);
+fu_plugin_alloc_data(FuPlugin *self, gsize data_sz) G_GNUC_NON_NULL(1);
 FuContext *
-fu_plugin_get_context(FuPlugin *self);
+fu_plugin_get_context(FuPlugin *self) G_GNUC_NON_NULL(1);
 void
-fu_plugin_device_add(FuPlugin *self, FuDevice *device);
+fu_plugin_device_add(FuPlugin *self, FuDevice *device) G_GNUC_NON_NULL(1, 2);
 void
-fu_plugin_device_remove(FuPlugin *self, FuDevice *device);
+fu_plugin_device_remove(FuPlugin *self, FuDevice *device) G_GNUC_NON_NULL(1, 2);
 void
-fu_plugin_device_register(FuPlugin *self, FuDevice *device);
+fu_plugin_device_register(FuPlugin *self, FuDevice *device) G_GNUC_NON_NULL(1, 2);
 void
-fu_plugin_add_device_gtype(FuPlugin *self, GType device_gtype);
+fu_plugin_add_device_gtype(FuPlugin *self, GType device_gtype) G_GNUC_NON_NULL(1);
+GType
+fu_plugin_get_device_gtype_default(FuPlugin *self) G_GNUC_NON_NULL(1);
 void
-fu_plugin_add_firmware_gtype(FuPlugin *self, const gchar *id, GType gtype);
+fu_plugin_set_device_gtype_default(FuPlugin *self, GType device_gtype) G_GNUC_NON_NULL(1);
 void
-fu_plugin_add_udev_subsystem(FuPlugin *self, const gchar *subsystem);
+fu_plugin_add_firmware_gtype(FuPlugin *self, const gchar *id, GType gtype) G_GNUC_NON_NULL(1);
+void
+fu_plugin_add_device_udev_subsystem(FuPlugin *self, const gchar *subsystem) G_GNUC_NON_NULL(1, 2);
+void
+fu_plugin_add_udev_subsystem(FuPlugin *self, const gchar *subsystem) G_GNUC_NON_NULL(1, 2);
 gpointer
-fu_plugin_cache_lookup(FuPlugin *self, const gchar *id);
+fu_plugin_cache_lookup(FuPlugin *self, const gchar *id) G_GNUC_NON_NULL(1, 2);
 void
-fu_plugin_cache_remove(FuPlugin *self, const gchar *id);
+fu_plugin_cache_remove(FuPlugin *self, const gchar *id) G_GNUC_NON_NULL(1, 2);
 void
-fu_plugin_cache_add(FuPlugin *self, const gchar *id, gpointer dev);
+fu_plugin_cache_add(FuPlugin *self, const gchar *id, gpointer dev) G_GNUC_NON_NULL(1, 2);
 GPtrArray *
-fu_plugin_get_devices(FuPlugin *self);
+fu_plugin_get_devices(FuPlugin *self) G_GNUC_NON_NULL(1);
 void
-fu_plugin_add_rule(FuPlugin *self, FuPluginRule rule, const gchar *name);
+fu_plugin_add_rule(FuPlugin *self, FuPluginRule rule, const gchar *name) G_GNUC_NON_NULL(1, 3);
 void
-fu_plugin_add_report_metadata(FuPlugin *self, const gchar *key, const gchar *value);
+fu_plugin_add_report_metadata(FuPlugin *self, const gchar *key, const gchar *value)
+    G_GNUC_NON_NULL(1, 2, 3);
+void
+fu_plugin_set_config_default(FuPlugin *self, const gchar *key, const gchar *value)
+    G_GNUC_NON_NULL(1, 2);
 gchar *
-fu_plugin_get_config_value(FuPlugin *self, const gchar *key, const gchar *value_default);
+fu_plugin_get_config_value(FuPlugin *self, const gchar *key) G_GNUC_NON_NULL(1, 2);
 gboolean
-fu_plugin_get_config_value_boolean(FuPlugin *self, const gchar *key, gboolean value_default);
+fu_plugin_get_config_value_boolean(FuPlugin *self, const gchar *key) G_GNUC_NON_NULL(1, 2);
 gboolean
-fu_plugin_set_config_value(FuPlugin *self, const gchar *key, const gchar *value, GError **error);
+fu_plugin_set_config_value(FuPlugin *self, const gchar *key, const gchar *value, GError **error)
+    G_GNUC_NON_NULL(1, 2);
 FwupdSecurityAttr *
-fu_plugin_security_attr_new(FuPlugin *self, const gchar *appstream_id);
+fu_plugin_security_attr_new(FuPlugin *self, const gchar *appstream_id) G_GNUC_NON_NULL(1, 2);

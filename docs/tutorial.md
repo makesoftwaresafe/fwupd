@@ -23,9 +23,9 @@ is taken automatically from the GType.
 
     /* fu-foo-plugin.h
      *
-     * Copyright (C) 2022 Richard Hughes <richard@hughsie.com>
+     * Copyright 2022 Richard Hughes <richard@hughsie.com>
      *
-     * SPDX-License-Identifier: LGPL-2.1+
+     * SPDX-License-Identifier: LGPL-2.1-or-later
      */
 
     #pragma once
@@ -36,9 +36,9 @@ is taken automatically from the GType.
 
     /* fu-foo-plugin.c
      *
-     * Copyright (C) Richard Hughes <richard@hughsie.com>
+     * Copyright Richard Hughes <richard@hughsie.com>
      *
-     * SPDX-License-Identifier: LGPL-2.1+
+     * SPDX-License-Identifier: LGPL-2.1-or-later
      */
 
     #include "config.h"
@@ -116,7 +116,7 @@ data from `sysfs` or `/dev`.
     {
         g_autoptr(FuDevice) dev = NULL;
         fu_device_set_id(dev, "dummy-1:2:3");
-        fu_device_add_guid(dev, "2d47f29b-83a2-4f31-a2e8-63474f4d4c2e");
+        fu_device_add_instance_id(dev, "2d47f29b-83a2-4f31-a2e8-63474f4d4c2e");
         fu_device_set_version(dev, "1.2.3");
         fu_device_get_version_lowest(dev, "1.2.2");
         fu_device_get_version_bootloader(dev, "0.1.2");
@@ -141,7 +141,7 @@ Some notable points:
 plugins, so including the plugin name as a prefix is probably a good idea.
 
 - The GUID value can be generated automatically using
-`fu_device_add_guid(dev,"some-identifier")` but is quoted here explicitly. The
+`fu_device_add_instance_id(dev,"some-identifier")` but is quoted here explicitly. The
 GUID value has to match the `provides` value in the `.metainfo.xml` file for the
 firmware update to succeed.
 
@@ -166,6 +166,29 @@ Similarly, setting the version of the bootloader (if known) allows the firmware
 to depend on a specific bootloader version, for instance allowing signed
 firmware to only be installable on hardware with a bootloader new enough to
 deploy it.
+
+### Setting the device version
+
+Although the version can be set easily as a string using `fu_device_set_version()`
+directly, it is more flexible to tell fwupd what the *version format* should be,
+and to allow the daemon to convert it to a string internally.
+
+This also means that if we get the version format from a quirk file, or from metadata,
+or even if it changes at runtime -- the correct string version is used at all times.
+
+    static gchar *
+    fu_foo_device_convert_version(FuDevice *device, guint64 version_raw)
+    {
+        return fu_version_from_uint24(version_raw, FWUPD_VERSION_FORMAT_TRIPLET);
+    }
+
+    static void
+    fu_foo_device_class_init(FuFooDeviceClass *klass)
+    {
+        …
+        device_class->convert_version = fu_foo_device_convert_version;
+        …
+    }
 
 ## Mechanism Plugins
 
@@ -521,6 +544,12 @@ device type if needed.
 
 #### prepare
 
+If implemented, can be used to put the device into a mode that makes
+updating possible or anything else that has to be done to a device
+before updating it is possible.
+
+#### prepare_firmware
+
 If implemented, this takes care of decompressing or parsing the firmware
 data. For example, to check if the firmware is valid, if it's suitable
 for the device, etc.
@@ -753,7 +782,7 @@ device, there might be firmware dependencies between parent and child
 devices that require a specific update ordering (for instance, child
 devices first, then the parent). This can be modeled by setting an
 appropriate firmware priority in the firmware metainfo or by setting the
-`FWUPD_DEVICE_FLAG_INSTALL_PARENT_FIRST` device flag.
+`FU_DEVICE_PRIVATE_FLAG_INSTALL_PARENT_FIRST` device flag.
 
 ### How to add a delay
 
@@ -761,10 +790,10 @@ In certain scenarios you may need to introduce small controlled delays
 in the plugin code, for instance, to comply with a communications
 protocol or to wait for the device to be ready after a particular
 operation. In this case you can insert a delay in microseconds with
-`g_usleep` or a delay in seconds that shows a progress bar with
-`fu_device_sleep_with_progress`. Note that, in both cases, this will
-stop the application main loop during the wait, so use it only when
-necessary.
+`g_usleep` or a delay in milliseconds that shows a progress bar with
+`fu_device_sleep` or `fu_device_sleep_full`. Note that, in both cases,
+this will stop the application main loop during the wait, so use it only
+when necessary.
 
 ### How to define private flags
 
@@ -778,8 +807,7 @@ define a private flag:
   2)`.  Note that this will be part of the ABI, so it must be versioned
 1. Call `fu_device_register_private_flag` in the device init function
   and assign a string identifier to the flag:
-  `fu_device_register_private_flag (FU_DEVICE (self), MY_PRIVATE_FLAG,
-  "myflag");`
+  `fu_device_register_private_flag(FU_DEVICE (self), MY_PRIVATE_FLAG);`
 
 You can then add it to the device programmatically with
 `fu_device_add_private_flag`, remove it with `fu_device_remove_private_flag`
@@ -862,53 +890,61 @@ highlighting support work correctly.
 Although these files *look like* Rust files they're *not actually compiled by
 rustc*, so small differences may be noticeable.
 
-    #[derive(New, Validate, Parse)]
-    struct ExampleHdr {
+    #[derive(New, Validate, Parse, Default)]
+    #[repr(C, packed)]
+    struct FuExampleHdr {
         magic: Guid,
         hdrver: u8,
-        hdrsz: u16le: default=$struct_size,
+        hdrsz: u16le = $struct_size,
         payloadsz: u32le,
         flags: u8,
     }
 
     #[derive(ToString, FromString)]
-    enum ExampleFamily {
+    #[repr(u8)] // optional, and only required if using the enum as a struct item type
+    enum FuExampleFamily {
         Unknown,
         Sps,
         Txe = 0x5,
         Me,
         Csme,
     }
+    struct ExamplePacket {
+        family: FuExampleFamily = Csme,
+        data: [u8; 254],
+    }
 
 The struct types currently supported are:
 
 - `u8`: a `guint8`
-- `u16le`: a `guint16
+- `u16le`: little endian `guint16`
 - `u24`: a 24 bit number represented as a `guint32`
 - `u32le`:  little endian `guint32`
 - `u64be`:  big endian `guint64`
 - `char`: a `NUL`-terminated string
 - `Guid`: a GUID
+- Any `enum` created in the `.rs` file with `#[repr(type)]`
+- Any `struct` previously created in the `.rs` file
 
 Arrays of types are also allowed, with the format `[type; multiple]`, for example:
 
-- `buf: [u8; 12]` for a C array of `guint8 buf[12] = {0};`
+- `buf: [u8; 3] = 0x123456` for a C array of `guint8 buf[3] = {0x12, 0x34, 0x56};`
 - `val: [u64be; 7]`  for a C array of `guint64 val[7] = {0};`
-- `str: [char; 4]: default="ABCD"` for a C array of `gchar buf[4] = {'A','B','C','D'};`
+- `str: [char; 4] = "ABCD"` for a C array of `gchar buf[4] = {'A','B','C','D'};`
   -- NOTE: `fu_struct_example_get_str()` would return a `NUL`-terminated string of `ABCD\0`.
 
-Additionally, default or constant values can be auto-populated:
+Additionally, default or constant values can be auto-populated with the `Default` trait:
 
 - `$struct_size`: the total struct size
 - `$struct_offset`: the internal offset in the struct
 - string values, specified **without** double or single quotes
 - integer values, specified with a `0x` prefix for base-16 and with no prefix for base-10
+- previously specified `enum` values
 
 Per-field metadata can also be defined, such as:
 
-- `default`: set as the default value
-- `constant`: set as the default, and is **also** verified during unpacking.
-- `padding`: initialize with a padding byte, typically `0xFF`
+- ` = `: set as the default value, or for `u8` arrays initialize with a padding byte
+- ` == `: set as the default, and is **also** verified during unpacking.
 
 Default values and padding will be used when creating a new structure,
 for instance using `fu_struct_example_new()`.
@@ -950,7 +986,7 @@ Regardless of traits used, the header offset addresses are defined, for instance
     #define FU_STRUCT_EXAMPLE_OFFSET_PAYLOADSZ 0x13
     #define FU_STRUCT_EXAMPLE_OFFSET_FLAGS 0x17
 
-Any elements defined as a typed array (e.g. `8u16`) will also have the element
+Any elements defined as a typed array (e.g. `[u8; 16]`) will also have the element
 size defined in bytes:
 
     #define FU_STRUCT_EXAMPLE_SIZE_MAGIC 0x10
@@ -971,6 +1007,7 @@ They are verified during `_validate()` and `_parse()` however.
 There are traits that control the generation of enum code. These include:
 
 - `ToString`: for `fu_example_family_to_string()`, needed to create output
+- `ToBitString`: for `fu_example_family_to_string()`, needed to create output for bitfields
 - `FromString`: for `fu_example_family_from_string()`, needed to parse input
 
 **NOTE:** Enums are defined as a native unsigned type, and should not be copied by

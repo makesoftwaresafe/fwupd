@@ -1,8 +1,8 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 #
-# Copyright (C) 2017 Dell Inc.
+# Copyright 2017 Dell Inc.
 #
-# SPDX-License-Identifier: LGPL-2.1+
+# SPDX-License-Identifier: LGPL-2.1-or-later
 #
 
 import os
@@ -14,6 +14,7 @@ CLANG_DIFF_FORMATTERS = [
     "clang-format-diff-11",
     "clang-format-diff-13",
     "clang-format-diff",
+    "/usr/share/clang/clang-format-diff.py",
 ]
 
 
@@ -50,7 +51,7 @@ if __name__ == "__main__":
     args = parse_args()
     base = os.getenv("GITHUB_BASE_REF")
     if base:
-        base = "origin/%s" % base
+        base = f"origin/{base}"
     else:
         if args.commit:
             base = args.commit[0]
@@ -64,27 +65,20 @@ if __name__ == "__main__":
         if args.debug:
             print(ret.stderr)
         base = "HEAD"
-    print("Reformatting code against %s" % base)
+    print(f"Reformatting code against {base}")
     formatter = select_clang_version(CLANG_DIFF_FORMATTERS)
     cmd = ["git", "diff", "-U0", base]
     if args.debug:
         print(cmd)
     ret = subprocess.run(cmd, capture_output=True, text=True)
     if ret.returncode:
-        print("Failed to run %s\n%s" % (cmd, ret.stderr.strip()))
+        print(f"Failed to run {cmd}\n{ret.stderr.strip()}")
         sys.exit(1)
-    cmd = [formatter, "-regex", "^.*\.(c|h|proto)$", "-p1"]
+    cmd = [formatter, "-i", "-regex", "^.*\\.(c|h|proto)$", "-p1"]
     if args.debug:
         print(cmd)
     ret = subprocess.run(cmd, input=ret.stdout, capture_output=True, text=True)
     if ret.returncode:
-        print("Failed to run %s\n%s" % (cmd, ret.stderr.strip()))
-        sys.exit(1)
-    cmd = ["patch", "-p0"]
-    if args.debug:
-        print(cmd)
-    ret = subprocess.run(cmd, input=ret.stdout, capture_output=True, text=True)
-    if ret.returncode:
-        print("Failed to run %s\n%s" % (cmd, ret.stderr.strip()))
+        print(f"Failed to run {cmd}\n{ret.stderr.strip()}")
         sys.exit(1)
     sys.exit(0)

@@ -1,6 +1,6 @@
-if efiboot.found() and efivar.found()
-
+if allow_uefi_capsule
 cargs = ['-DG_LOG_DOMAIN="FuPluginUefiCapsule"']
+plugins += {meson.current_source_dir().split('/')[-1]: true}
 
 efi_os_dir = get_option('efi_os_dir')
 if efi_os_dir != ''
@@ -39,9 +39,9 @@ plugin_builtin_uefi_capsule = static_library('fu_plugin_uefi_capsule',
     'fu-uefi-nvram-device.c',
     'fu-uefi-grub-device.c',
     'fu-uefi-device.c',
-    'fu-uefi-devpath.c',
     'fu-uefi-update-info.c',
     'fu-acpi-uefi.c',
+    'fu-bitmap-image.c',
     backend_srcs,
   ],
   include_directories: plugin_incdirs,
@@ -50,47 +50,9 @@ plugin_builtin_uefi_capsule = static_library('fu_plugin_uefi_capsule',
   dependencies: [
     plugin_deps,
     platform_deps,
-    efiboot,
   ],
 )
 plugin_builtins += plugin_builtin_uefi_capsule
-
-if get_option('compat_cli')
-fwupdate = executable(
-  'fwupdate',
-  rustgen.process('fu-uefi.rs'),
-  sources: [
-    'fu-uefi-tool.c',
-  ],
-  include_directories: plugin_incdirs,
-  dependencies: [
-    plugin_deps,
-    platform_deps,
-    efiboot,
-  ],
-  link_with: [
-    plugin_libs,
-    plugin_builtin_uefi_capsule,
-  ],
-  install: true,
-  install_dir: bindir,
-  install_rpath: libdir_pkg,
-  c_args: cargs,
-)
-endif
-
-if get_option('compat_cli') and get_option('man')
-  custom_target('fwupdate.1',
-    input: 'fwupdate.md',
-    output: 'fwupdate.1',
-    command: [
-      generate_man, '@INPUT@', '-o', '@OUTPUT@',
-      '--replace', 'PACKAGE_VERSION', fwupd_version,
-    ],
-    install: true,
-    install_dir: join_paths(mandir, 'man1'),
-  )
-endif
 
 # add all the .po files as inputs to watch
 ux_linguas = run_command(
@@ -102,8 +64,20 @@ foreach ux_lingua: ux_linguas
   ux_capsule_pofiles += join_paths(meson.project_source_root(), 'po', '@0@.po'.format(ux_lingua))
 endforeach
 
+if get_option('efi_binary')
+  efi_binary = dependency('fwupd-efi', version: '>= 1.6', fallback: ['fwupd-efi', 'fwupd_efi_dep'])
+endif
+
 if get_option('plugin_uefi_capsule_splash')
   # add the archive of pregenerated images
+  splash_deps = run_command([
+    python3,
+    join_paths(meson.project_source_root(), 'po', 'test-deps'),
+    join_paths(meson.project_source_root(), 'po', 'LINGUAS'),
+  ], check: false)
+  if splash_deps.returncode() != 0
+    error(splash_deps.stderr().strip())
+  endif
   custom_target('ux-capsule-tar',
     input: [
       join_paths(meson.project_source_root(), 'po', 'LINGUAS'),
@@ -138,7 +112,6 @@ if get_option('tests')
     dependencies: [
       plugin_deps,
       platform_deps,
-      efiboot,
     ],
     link_with: [
       fwupd,
@@ -165,11 +138,12 @@ install_data([
   ],
   install_dir: join_paths(installed_test_datadir, 'efi/esrt/entries/entry0'),
 )
-install_data([
-    'tests/efi/efivars/CapsuleMax-39b68c46-f7fb-441b-b6ec-16b0f69821f3',
-  ],
-  install_dir: join_paths(installed_test_datadir, 'efi/efivars'),
-)
 endif
 
+summary({
+  'efi_os_dir': efi_os_dir,
+  'efi binary': get_option('efi_binary'),
+  'capsule splash': get_option('plugin_uefi_capsule_splash'),
+}, section:'uefi capsule options')
 endif
+

@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2021 Mario Limonciello <mario.limonciello@amd.com>
+ * Copyright 2021 Mario Limonciello <mario.limonciello@amd.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #include "config.h"
@@ -38,7 +38,9 @@ static void
 fu_lenovo_thinklmi_plugin_cpu_registered(FuContext *ctx, FuDevice *device)
 {
 	/* Ryzen 6000 doesn't support S3 even if the BIOS offers it */
-	if (fu_device_has_instance_id(device, "CPUID\\PRO_0&FAM_19&MOD_44")) {
+	if (fu_device_has_instance_id(device,
+				      "CPUID\\PRO_0&FAM_19&MOD_44",
+				      FU_DEVICE_INSTANCE_FLAG_VISIBLE)) {
 		FwupdBiosSetting *attr = fu_context_get_bios_setting(ctx, BIOS_SETTING_SLEEP_MODE);
 
 		if (attr != NULL) {
@@ -99,6 +101,7 @@ fu_lenovo_thinklmi_plugin_add_security_attrs(FuPlugin *plugin, FuSecurityAttrs *
 
 	attr = fu_plugin_security_attr_new(plugin, FWUPD_SECURITY_ATTR_ID_BIOS_ROLLBACK_PROTECTION);
 	fu_security_attr_add_bios_target_value(attr, BIOS_SETTING_SECURE_ROLLBACK, "enable");
+	fwupd_security_attr_set_result_success(attr, FWUPD_SECURITY_ATTR_RESULT_ENABLED);
 	fu_security_attrs_append(attrs, attr);
 
 	if (g_strcmp0(fwupd_bios_setting_get_current_value(bios_attr), "Disable") == 0) {
@@ -107,7 +110,6 @@ fu_lenovo_thinklmi_plugin_add_security_attrs(FuPlugin *plugin, FuSecurityAttrs *
 		return;
 	}
 
-	fwupd_security_attr_set_result(attr, FWUPD_SECURITY_ATTR_RESULT_ENABLED);
 	fwupd_security_attr_add_flag(attr, FWUPD_SECURITY_ATTR_FLAG_SUCCESS);
 }
 

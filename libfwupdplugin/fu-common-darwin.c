@@ -1,14 +1,13 @@
 /*
- * Copyright (C) 2022 Richard Hughes <richard@hughsie.com>
+ * Copyright 2022 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #define G_LOG_DOMAIN "FuCommon"
 
 #include "config.h"
 
-#include <fnmatch.h>
 #include <sys/sysctl.h>
 
 #include "fu-common-private.h"
@@ -16,17 +15,11 @@
 GPtrArray *
 fu_common_get_block_devices(GError **error)
 {
-	g_set_error(error,
-		    G_IO_ERROR,
-		    G_IO_ERROR_NOT_SUPPORTED,
-		    "getting block devices is not supported on Darwin");
+	g_set_error_literal(error,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_NOT_SUPPORTED,
+			    "getting block devices is not supported on Darwin");
 	return NULL;
-}
-
-gboolean
-fu_path_fnmatch_impl(const gchar *pattern, const gchar *str)
-{
-	return fnmatch(pattern, str, FNM_NOESCAPE) == 0;
 }
 
 guint64
@@ -37,4 +30,23 @@ fu_common_get_memory_size_impl(void)
 	gsize length = sizeof(physical_memory);
 	sysctl(mib, 2, &physical_memory, &length, NULL, 0);
 	return (guint64)physical_memory;
+}
+
+gchar *
+fu_common_get_kernel_cmdline_impl(GError **error)
+{
+	gchar cmdline[1024] = {0};
+	gsize cmdlinesz = sizeof(cmdline);
+	sysctlbyname("kern.bootargs", cmdline, &cmdlinesz, NULL, 0);
+	return g_strndup(cmdline, sizeof(cmdline));
+}
+
+gchar *
+fu_common_get_olson_timezone_id_impl(GError **error)
+{
+	g_set_error_literal(error,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_NOT_SUPPORTED,
+			    "getting the Olson timezone ID is not supported on Darwin");
+	return NULL;
 }

@@ -1,6 +1,7 @@
 if get_option('plugin_cpu').disable_auto_if(host_machine.system() != 'linux').require(hsi,
     error_message: 'plugin_cpu needs hsi to be set').allowed()
 cargs = ['-DG_LOG_DOMAIN="FuPluginCpu"']
+plugins += {meson.current_source_dir().split('/')[-1]: true}
 
 plugin_quirks += files('cpu.quirk')
 plugin_builtins += static_library('fu_plugin_cpu',
@@ -22,7 +23,7 @@ static void __attribute__((noinline,noclone)) f(void) {}
 '''
 
 # verify the compiler knows what to do
-if cc.has_argument('-fcf-protection')
+if host_cpu == 'x86_64' and cc.has_argument('-fcf-protection')
   build_fwupdcethelper = cc.compiles(code,
     name: '__attribute__((noinline,noclone))',
   )
@@ -33,7 +34,7 @@ endif
 if build_fwupdcethelper
   libfwupdcethelper = static_library('fwupdcethelper',
     sources: [
-      'fu-cpu-helper-cet-common.c',
+      'fu-cpu-helper-cet-common.S',
     ],
     include_directories: [
       root_incdir,

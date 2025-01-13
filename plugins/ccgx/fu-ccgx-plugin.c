@@ -1,17 +1,16 @@
 /*
- * Copyright (C) 2020 Cypress Semiconductor Corporation.
+ * Copyright 2020 Cypress Semiconductor Corporation.
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #include "config.h"
 
-#include "fu-ccgx-dmc-device.h"
-#include "fu-ccgx-dmc-firmware.h"
 #include "fu-ccgx-firmware.h"
 #include "fu-ccgx-hid-device.h"
 #include "fu-ccgx-hpi-device.h"
 #include "fu-ccgx-plugin.h"
+#include "fu-ccgx-pure-hid-device.h"
 
 struct _FuCcgxPlugin {
 	FuPlugin parent_instance;
@@ -32,12 +31,10 @@ fu_ccgx_plugin_constructed(GObject *obj)
 	fu_context_add_quirk_key(ctx, "CcgxFlashRowSize");
 	fu_context_add_quirk_key(ctx, "CcgxFlashSize");
 	fu_context_add_quirk_key(ctx, "CcgxImageKind");
-	fu_context_add_quirk_key(ctx, "CcgxDmcTriggerCode");
 	fu_plugin_add_firmware_gtype(plugin, NULL, FU_TYPE_CCGX_FIRMWARE);
-	fu_plugin_add_firmware_gtype(plugin, NULL, FU_TYPE_CCGX_DMC_FIRMWARE);
 	fu_plugin_add_device_gtype(plugin, FU_TYPE_CCGX_HID_DEVICE);
+	fu_plugin_add_device_gtype(plugin, FU_TYPE_CCGX_PURE_HID_DEVICE);
 	fu_plugin_add_device_gtype(plugin, FU_TYPE_CCGX_HPI_DEVICE);
-	fu_plugin_add_device_gtype(plugin, FU_TYPE_CCGX_DMC_DEVICE);
 }
 
 static void

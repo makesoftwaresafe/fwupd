@@ -10,17 +10,12 @@ This plugin adds support for devices managed by ModemManager.
 
 These device use the ModemManager "Firmware Device IDs" as the GUID, e.g.
 
-* `USB\VID_413C&PID_81D7&REV_0318&CARRIER_VODAFONE`
+* `USB\VID_413C&PID_81D7&REV_0318&CARRIER_VODAFONE` (only if not using `Flags=use-branch`)
 * `USB\VID_413C&PID_81D7&REV_0318`
 * `USB\VID_413C&PID_81D7`
-* `USB\VID_413C`
-* `PCI\VID_105B&PID_E0AB&REV_0000&CARRIER_VODAFONE`
+* `PCI\VID_105B&PID_E0AB&REV_0000&CARRIER_VODAFONE` (only if not using `Flags=use-branch`)
 * `PCI\VID_105B&PID_E0AB&REV_0000`
 * `PCI\VID_105B&PID_E0AB`
-* `PCI\VID_105B`
-* `PCI\VID_1EAC&PID_1001`
-* `PCI\VID_1EAC&PID_1002`
-* `PCI\VID_1EAC`
 
 ## Quirk Use
 
@@ -37,6 +32,27 @@ Since: 1.7.4
 Firehose program file to use during the switch to EDL (Emergency Download) mode.
 
 Since: 1.8.10
+
+### `Flags=use-branch`
+
+Use the carrier (e.g. `VODAFONE`) as the device branch name so that `fwupdmgr sync` can downgrade
+the firmware as required.
+
+This is now the recommended mode for all modem devices with a carrier-specific firmware image,
+although it requires that the firmware branch is also set in the firmware metadata.
+
+Since: 1.9.8
+
+### `Flags=detach-at-fastboot-has-no-response`
+
+If no AT response is expected when entering fastboot mode.
+
+### `Flags=uninhibit-modemmanager-after-fastboot-reboot`
+
+After entering the fastboot state, the modem cannot execute the attach method in the MM plugin
+plugin plugin.
+The shadow device needs to be used to uninhibit the modem when `fu_mm_plugin_udev_uevent_cb`
+detects it.
 
 ## Vendor ID Security
 
@@ -91,6 +107,25 @@ with files described in 'firehose-rawprogram.xml'.
 
 Update protocol: `com.qualcomm.firehose`
 
+## Update method: cinterion-fdl
+
+If the device supports the 'cinterion-fdl' update method, it should have an AT-port
+exposed. The device is then switched to Firmware Download Modem (FDL) and flashed
+with the content of the firmware file. After an update, the device will not replug
+until an ignition is sent, or the device is rebooted.
+
+Update protocol: `com.cinterion.fdl`
+
+## Update method: dfota
+
+If the device supports the 'dfota' update method, it should have an AT-port
+exposed. The device is then switched to data mode and downloads the
+firmware to the ota partition via the AT-port. DFOTA updates require a specific
+firmware version to be installed on the device, since the update only contains
+a diff between the installed and target version.
+
+Update protocol: `com.quectel.dfota`
+
 ## External Interface Access
 
 This plugin requires read/write access to `/dev/bus/usb` and `/dev/bus/pci`.
@@ -98,3 +133,10 @@ This plugin requires read/write access to `/dev/bus/usb` and `/dev/bus/pci`.
 ## Version Considerations
 
 This plugin has been available since fwupd version `1.2.6`.
+
+## Owners
+
+Anyone can submit a pull request to modify this plugin, but the following people should be
+consulted before making major or functional changes:
+
+* Aleksander Morgado: @aleksander0m

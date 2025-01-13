@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2020 Jimmy Yu <Jimmy_yu@pixart.com>
+ * Copyright 2020 Jimmy Yu <Jimmy_yu@pixart.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #pragma once
@@ -17,3 +17,6 @@ FuFirmware *
 fu_pxi_firmware_new(void);
 const gchar *
 fu_pxi_firmware_get_model_name(FuPxiFirmware *self);
+
+gboolean
+fu_pxi_firmware_is_hpac(FuPxiFirmware *self);

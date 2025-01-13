@@ -1,8 +1,8 @@
 /*
- * Copyright (C) 2020 Philip Withnall <philip@tecnocode.co.uk>
- * Copyright (C) 2020 Richard Hughes <richard@hughsie.com>
+ * Copyright 2020 Philip Withnall <philip@tecnocode.co.uk>
+ * Copyright 2020 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #include <fwupd.h>
@@ -54,7 +54,7 @@ fwupd_thread_test_idle_cb(gpointer user_data)
 	for (guint i = 0; i < 30; i++) {
 		g_autofree gchar *thread_str = g_strdup_printf("worker%02u", i);
 		GThread *thread = g_thread_new(thread_str, fwupd_thread_test_thread_cb, self);
-		g_usleep(g_random_int_range(0, 1000));
+		g_usleep(g_random_int_range(0, 1000)); /* nocheck:blocked */
 		g_ptr_array_add(self->worker_threads, thread);
 		if (i > 0)
 			g_application_hold(self->app);

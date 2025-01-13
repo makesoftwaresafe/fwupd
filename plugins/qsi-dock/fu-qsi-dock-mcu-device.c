@@ -1,8 +1,8 @@
 /*
- * Copyright (C) 2021 Richard Hughes <richard@hughsie.com>
- * Copyright (C) 2022 Kevin Chen <hsinfu.chen@qsitw.com>
+ * Copyright 2021 Richard Hughes <richard@hughsie.com>
+ * Copyright 2022 Kevin Chen <hsinfu.chen@qsitw.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #include "config.h"
@@ -38,7 +38,7 @@ fu_qsi_dock_mcu_device_tx(FuQsiDockMcuDevice *self,
 					buf,
 					sizeof(buf),
 					FU_QSI_DOCK_MCU_DEVICE_TIMEOUT,
-					FU_HID_DEVICE_FLAG_NONE,
+					FU_HID_DEVICE_FLAG_USE_INTERRUPT_TRANSFER,
 					error);
 }
 
@@ -52,7 +52,7 @@ fu_qsi_dock_mcu_device_rx(FuQsiDockMcuDevice *self, guint8 *outbuf, gsize outbuf
 				      buf,
 				      sizeof(buf),
 				      FU_QSI_DOCK_MCU_DEVICE_TIMEOUT,
-				      FU_HID_DEVICE_FLAG_NONE,
+				      FU_HID_DEVICE_FLAG_USE_INTERRUPT_TRANSFER,
 				      error)) {
 		return FALSE;
 	}
@@ -126,7 +126,7 @@ fu_qsi_dock_mcu_device_enumerate_children(FuQsiDockMcuDevice *self, GError **err
 		g_autofree gchar *version = NULL;
 		g_autoptr(FuDevice) child = NULL;
 
-		child = fu_qsi_dock_child_new(fu_device_get_context(FU_DEVICE(self)));
+		child = fu_qsi_dock_child_device_new(fu_device_get_context(FU_DEVICE(self)));
 		if (g_strcmp0(components[i].name, "bcdVersion") == 0) {
 			if ((val[0] == 0x00 && val[1] == 0x00) ||
 			    (val[0] == 0xFF && val[1] == 0xFF)) {
@@ -134,7 +134,10 @@ fu_qsi_dock_mcu_device_enumerate_children(FuQsiDockMcuDevice *self, GError **err
 				continue;
 			}
 
-			version = g_strdup_printf("%x.%x.%02x", val[0] & 0xFu, val[0] >> 4, val[1]);
+			version = g_strdup_printf("%x.%x.%02x",
+						  val[0] & 0xFu,
+						  (guint)(val[0] >> 4),
+						  val[1]);
 			g_debug("ignoring %s --> %s", components[i].name, version);
 
 			continue;
@@ -157,12 +160,8 @@ fu_qsi_dock_mcu_device_enumerate_children(FuQsiDockMcuDevice *self, GError **err
 		}
 
 		/* add virtual device */
-		fu_device_add_instance_u16(child,
-					   "VID",
-					   fu_usb_device_get_vid(FU_USB_DEVICE(self)));
-		fu_device_add_instance_u16(child,
-					   "PID",
-					   fu_usb_device_get_pid(FU_USB_DEVICE(self)));
+		fu_device_add_instance_u16(child, "VID", fu_device_get_vid(FU_DEVICE(self)));
+		fu_device_add_instance_u16(child, "PID", fu_device_get_pid(FU_DEVICE(self)));
 		fu_device_add_instance_str(child, "CID", components[i].name);
 		if (!fu_device_build_instance_id(child, error, "USB", "VID", "PID", "CID", NULL))
 			return FALSE;
@@ -241,7 +240,7 @@ fu_qsi_dock_mcu_device_checksum(FuQsiDockMcuDevice *self,
 				      buf,
 				      sizeof(buf),
 				      FU_QSI_DOCK_MCU_DEVICE_TIMEOUT,
-				      FU_HID_DEVICE_FLAG_NONE,
+				      FU_HID_DEVICE_FLAG_USE_INTERRUPT_TRANSFER,
 				      error))
 		return FALSE;
 	memset(buf, 0x0, sizeof(buf));
@@ -250,7 +249,7 @@ fu_qsi_dock_mcu_device_checksum(FuQsiDockMcuDevice *self,
 				      buf,
 				      sizeof(buf),
 				      FU_QSI_DOCK_MCU_DEVICE_TIMEOUT,
-				      FU_HID_DEVICE_FLAG_NONE,
+				      FU_HID_DEVICE_FLAG_USE_INTERRUPT_TRANSFER,
 				      error))
 		return FALSE;
 
@@ -270,21 +269,28 @@ fu_qsi_dock_mcu_device_write_chunk(FuQsiDockMcuDevice *self,
 				   FuProgress *progress,
 				   GError **error)
 {
-	g_autoptr(GPtrArray) chunks = NULL;
+	g_autoptr(FuChunkArray) chunks = NULL;
+	g_autoptr(GBytes) chk_bytes = fu_chunk_get_bytes(chk_page);
 
-	chunks = fu_chunk_array_new(fu_chunk_get_data(chk_page),
-				    fu_chunk_get_data_sz(chk_page),
-				    0x0,
-				    0x0,
-				    FU_QSI_DOCK_TX_ISP_LENGTH_MCU);
+	chunks = fu_chunk_array_new_from_bytes(chk_bytes,
+					       FU_CHUNK_ADDR_OFFSET_NONE,
+					       FU_CHUNK_PAGESZ_NONE,
+					       FU_QSI_DOCK_TX_ISP_LENGTH_MCU);
 	fu_progress_set_id(progress, G_STRLOC);
-	fu_progress_set_steps(progress, chunks->len);
-	for (guint i = 0; i < chunks->len; i++) {
-		FuChunk *chk = g_ptr_array_index(chunks, i);
+	fu_progress_set_steps(progress, fu_chunk_array_length(chunks));
+	for (guint i = 0; i < fu_chunk_array_length(chunks); i++) {
+		g_autoptr(FuChunk) chk = NULL;
 		guint8 checksum_buf[FU_QSI_DOCK_TX_ISP_LENGTH_MCU] = {0x0};
-		guint8 buf[64] = {FU_QSI_DOCK_REPORT_ID,
-				  FU_QSI_DOCK_CMD1_MASS_SPI,
-				  fu_chunk_get_data_sz(chk)};
+		guint8 buf[64] = {
+		    FU_QSI_DOCK_REPORT_ID,
+		    FU_QSI_DOCK_CMD1_MASS_SPI,
+		};
+
+		/* prepare chunk */
+		chk = fu_chunk_array_index(chunks, i, error);
+		if (chk == NULL)
+			return FALSE;
+		buf[2] = fu_chunk_get_data_sz(chk);
 
 		/* SetReport */
 		if (!fu_memcpy_safe(buf,
@@ -301,7 +307,7 @@ fu_qsi_dock_mcu_device_write_chunk(FuQsiDockMcuDevice *self,
 					      buf,
 					      sizeof(buf),
 					      FU_QSI_DOCK_MCU_DEVICE_TIMEOUT,
-					      FU_HID_DEVICE_FLAG_NONE,
+					      FU_HID_DEVICE_FLAG_USE_INTERRUPT_TRANSFER,
 					      error))
 			return FALSE;
 
@@ -324,7 +330,7 @@ fu_qsi_dock_mcu_device_write_chunk(FuQsiDockMcuDevice *self,
 					      buf,
 					      sizeof(buf),
 					      FU_QSI_DOCK_MCU_DEVICE_TIMEOUT,
-					      FU_HID_DEVICE_FLAG_NONE,
+					      FU_HID_DEVICE_FLAG_USE_INTERRUPT_TRANSFER,
 					      error))
 			return FALSE;
 
@@ -346,15 +352,20 @@ fu_qsi_dock_mcu_device_write_chunk(FuQsiDockMcuDevice *self,
 
 static gboolean
 fu_qsi_dock_mcu_device_write_chunks(FuQsiDockMcuDevice *self,
-				    GPtrArray *chunks,
+				    FuChunkArray *chunks,
 				    guint32 *checksum,
 				    FuProgress *progress,
 				    GError **error)
 {
 	fu_progress_set_id(progress, G_STRLOC);
-	fu_progress_set_steps(progress, chunks->len);
-	for (guint i = 0; i < chunks->len; i++) {
-		FuChunk *chk = g_ptr_array_index(chunks, i);
+	fu_progress_set_steps(progress, fu_chunk_array_length(chunks));
+	for (guint i = 0; i < fu_chunk_array_length(chunks); i++) {
+		g_autoptr(FuChunk) chk = NULL;
+
+		/* prepare chunk */
+		chk = fu_chunk_array_index(chunks, i, error);
+		if (chk == NULL)
+			return FALSE;
 		if (!fu_qsi_dock_mcu_device_write_chunk(self,
 							chk,
 							checksum,
@@ -385,7 +396,7 @@ fu_qsi_dock_mcu_device_wait_for_spi_initial_ready_cb(FuDevice *device,
 				      buf,
 				      sizeof(buf),
 				      FU_QSI_DOCK_MCU_DEVICE_TIMEOUT,
-				      FU_HID_DEVICE_FLAG_NONE,
+				      FU_HID_DEVICE_FLAG_USE_INTERRUPT_TRANSFER,
 				      error))
 		return FALSE;
 	memset(buf, 0x0, sizeof(buf));
@@ -394,7 +405,7 @@ fu_qsi_dock_mcu_device_wait_for_spi_initial_ready_cb(FuDevice *device,
 				      buf,
 				      sizeof(buf),
 				      FU_QSI_DOCK_MCU_DEVICE_TIMEOUT,
-				      FU_HID_DEVICE_FLAG_NONE,
+				      FU_HID_DEVICE_FLAG_USE_INTERRUPT_TRANSFER,
 				      error))
 		return FALSE;
 
@@ -444,7 +455,7 @@ fu_qsi_dock_mcu_device_wait_for_spi_erase_ready_cb(FuQsiDockMcuDevice *self,
 				      buf,
 				      sizeof(buf),
 				      FU_QSI_DOCK_MCU_DEVICE_TIMEOUT,
-				      FU_HID_DEVICE_FLAG_NONE,
+				      FU_HID_DEVICE_FLAG_USE_INTERRUPT_TRANSFER,
 				      error))
 		return FALSE;
 	memset(buf, 0x0, sizeof(buf));
@@ -453,7 +464,7 @@ fu_qsi_dock_mcu_device_wait_for_spi_erase_ready_cb(FuQsiDockMcuDevice *self,
 				      buf,
 				      sizeof(buf),
 				      FU_QSI_DOCK_MCU_DEVICE_TIMEOUT,
-				      FU_HID_DEVICE_FLAG_NONE,
+				      FU_HID_DEVICE_FLAG_USE_INTERRUPT_TRANSFER,
 				      error))
 		return FALSE;
 
@@ -472,7 +483,7 @@ fu_qsi_dock_mcu_device_write_firmware_with_idx(FuQsiDockMcuDevice *self,
 	guint32 checksum_val = 0;
 	g_autoptr(GBytes) fw_align = NULL;
 	g_autoptr(GBytes) fw = NULL;
-	g_autoptr(GPtrArray) chunks = NULL;
+	g_autoptr(FuChunkArray) chunks = NULL;
 
 	/* progress */
 	fu_progress_set_id(progress, G_STRLOC);
@@ -502,7 +513,10 @@ fu_qsi_dock_mcu_device_write_firmware_with_idx(FuQsiDockMcuDevice *self,
 		return FALSE;
 
 	/* write external flash */
-	chunks = fu_chunk_array_new_from_bytes(fw_align, 0, 0, FU_QSI_DOCK_EXTERN_FLASH_PAGE_SIZE);
+	chunks = fu_chunk_array_new_from_bytes(fw_align,
+					       FU_CHUNK_ADDR_OFFSET_NONE,
+					       FU_CHUNK_PAGESZ_NONE,
+					       FU_QSI_DOCK_EXTERN_FLASH_PAGE_SIZE);
 	if (!fu_qsi_dock_mcu_device_write_chunks(self,
 						 chunks,
 						 &checksum_val,
@@ -563,9 +577,9 @@ fu_qsi_dock_mcu_device_init(FuQsiDockMcuDevice *self)
 {
 	fu_device_add_flag(FU_DEVICE(self), FWUPD_DEVICE_FLAG_SIGNED_PAYLOAD);
 	fu_device_add_flag(FU_DEVICE(self), FWUPD_DEVICE_FLAG_UPDATABLE);
-	fu_hid_device_add_flag(FU_HID_DEVICE(self), FU_HID_DEVICE_FLAG_USE_INTERRUPT_TRANSFER);
-	fu_device_add_internal_flag(FU_DEVICE(self), FU_DEVICE_INTERNAL_FLAG_INHIBIT_CHILDREN);
-	fu_device_add_internal_flag(FU_DEVICE(self), FU_DEVICE_INTERNAL_FLAG_NO_SERIAL_NUMBER);
+	fu_hid_device_add_flag(FU_HID_DEVICE(self), FU_HID_DEVICE_FLAG_AUTODETECT_EPS);
+	fu_device_add_private_flag(FU_DEVICE(self), FU_DEVICE_PRIVATE_FLAG_INHIBIT_CHILDREN);
+	fu_device_add_private_flag(FU_DEVICE(self), FU_DEVICE_PRIVATE_FLAG_NO_SERIAL_NUMBER);
 	fu_device_set_version_format(FU_DEVICE(self), FWUPD_VERSION_FORMAT_NUMBER);
 	fu_device_add_protocol(FU_DEVICE(self), "com.qsi.dock");
 }
@@ -573,10 +587,10 @@ fu_qsi_dock_mcu_device_init(FuQsiDockMcuDevice *self)
 static void
 fu_qsi_dock_mcu_device_class_init(FuQsiDockMcuDeviceClass *klass)
 {
-	FuDeviceClass *klass_device = FU_DEVICE_CLASS(klass);
+	FuDeviceClass *device_class = FU_DEVICE_CLASS(klass);
 
-	klass_device->setup = fu_qsi_dock_mcu_device_setup;
-	klass_device->attach = fu_qsi_dock_mcu_device_attach;
-	klass_device->set_progress = fu_qsi_dock_mcu_device_set_progress;
-	klass_device->write_firmware = fu_qsi_dock_mcu_device_write_firmware;
+	device_class->setup = fu_qsi_dock_mcu_device_setup;
+	device_class->attach = fu_qsi_dock_mcu_device_attach;
+	device_class->set_progress = fu_qsi_dock_mcu_device_set_progress;
+	device_class->write_firmware = fu_qsi_dock_mcu_device_write_firmware;
 }

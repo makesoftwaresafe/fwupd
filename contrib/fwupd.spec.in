@@ -1,9 +1,9 @@
 %global glib2_version 2.45.8
 %global libxmlb_version 0.1.3
-%global libgusb_version 0.3.5
-%global libcurl_version 7.61.0
+%global libusb_version 1.0.9
+%global libcurl_version 7.62.0
 %global libjcat_version 0.1.0
-%global systemd_version 231
+%global systemd_version 249
 %global json_glib_version 1.1.1
 
 # although we ship a few tiny python files these are utilities that 99.99%
@@ -14,11 +14,10 @@
 
 %global enable_ci 0
 %global enable_tests 1
-%global enable_dummy 1
 %global __meson_wrap_mode nodownload
 
 # fwupd.efi is only available on these arches
-%ifarch x86_64 aarch64
+%ifarch x86_64 aarch64 riscv64
 %global have_uefi 1
 %endif
 
@@ -28,17 +27,12 @@
 %endif
 
 # flashrom is only available on these arches
-%ifarch i686 x86_64 armv7hl aarch64 ppc64le
+%ifarch i686 x86_64 armv7hl aarch64 ppc64le riscv64
 %global have_flashrom 1
 %endif
 
 %ifarch i686 x86_64
 %global have_msr 1
-%endif
-
-# libsmbios is only available on x86
-%ifarch x86_64
-%global have_dell 1
 %endif
 
 # Until we actually have seen it outside x86
@@ -49,6 +43,10 @@
 # only available recently
 %if 0%{?fedora} >= 30
 %global have_modem_manager 1
+%endif
+
+%if 0%{?fedora}
+%global have_passim 1
 %endif
 
 Summary:   Firmware update daemon
@@ -62,21 +60,23 @@ Source0:   http://people.freedesktop.org/~hughsient/releases/%{name}-%{version}.
 BuildRequires: gettext
 BuildRequires: glib2-devel >= %{glib2_version}
 BuildRequires: libxmlb-devel >= %{libxmlb_version}
-BuildRequires: libgcab1-devel
-BuildRequires: libgudev1-devel
-BuildRequires: libgusb-devel >= %{libgusb_version}
+BuildRequires: libusb1-devel >= %{libusb_version}
 BuildRequires: libcurl-devel >= %{libcurl_version}
 BuildRequires: libjcat-devel >= %{libjcat_version}
 BuildRequires: polkit-devel >= 0.103
 BuildRequires: protobuf-c-devel
 BuildRequires: python3-packaging
+BuildRequires: python3-jinja2
 BuildRequires: sqlite-devel
 BuildRequires: systemd >= %{systemd_version}
 BuildRequires: systemd-devel
 BuildRequires: libarchive-devel
 BuildRequires: libcbor-devel
+BuildRequires: libblkid-devel
+%if 0%{?have_passim}
+BuildRequires: passim-devel
+%endif
 BuildRequires: gobject-introspection-devel
-BuildRequires: gcab
 %ifarch %{valgrind_arches}
 BuildRequires: valgrind
 BuildRequires: valgrind-devel
@@ -87,11 +87,12 @@ BuildRequires: gnutls-utils
 BuildRequires: meson
 BuildRequires: json-glib-devel >= %{json_glib_version}
 BuildRequires: vala
-BuildRequires: bash-completion
+BuildRequires: pkgconfig(bash-completion)
 BuildRequires: git-core
 %if 0%{?have_flashrom}
 BuildRequires: flashrom-devel >= 1.2-2
 %endif
+BuildRequires: libdrm-devel
 
 %if 0%{?have_modem_manager}
 BuildRequires: ModemManager-glib-devel >= 1.10.0
@@ -100,7 +101,6 @@ BuildRequires: libmbim-devel
 %endif
 
 %if 0%{?have_uefi}
-BuildRequires: efivar-devel >= 33
 BuildRequires: python3 python3-cairo python3-gobject
 BuildRequires: pango-devel
 BuildRequires: cairo-devel cairo-gobject-devel
@@ -110,28 +110,18 @@ BuildRequires: google-noto-sans-cjk-ttc-fonts
 BuildRequires: tpm2-tss-devel >= 2.2.3
 %endif
 
-%if 0%{?have_dell}
-BuildRequires: efivar-devel >= 33
-BuildRequires: libsmbios-devel >= 2.3.0
-%endif
-
 Requires(post): systemd
 Requires(preun): systemd
 Requires(postun): systemd
 
 Requires: glib2%{?_isa} >= %{glib2_version}
 Requires: libxmlb%{?_isa} >= %{libxmlb_version}
-Requires: libgusb%{?_isa} >= %{libgusb_version}
+Requires: libusb1%{?_isa} >= %{libusb_version}
 Requires: shared-mime-info
 
 %if 0%{?rhel} > 7 || 0%{?fedora} > 28
 Recommends: python3
 %endif
-
-Obsoletes: fwupd-sign < 0.1.6
-Obsoletes: libebitdo < 0.7.5-3
-Obsoletes: libdfu < 1.0.0
-Obsoletes: fwupd-labels < 1.1.0-1
 
 Obsoletes: dbxtool < 9
 Provides: dbxtool
@@ -148,6 +138,9 @@ Provides: fwupdate-efi
 Recommends: udisks2
 Recommends: bluez
 Recommends: jq
+%if 0%{?have_passim}
+Recommends: passim
+%endif
 
 %if 0%{?have_modem_manager}
 Recommends: %{name}-plugin-modem-manager
@@ -214,8 +207,7 @@ or server machines.
 %if 0%{?qubes_packages}
 %package qubes-dom0
 Summary: fwupd wrapper for Qubes OS - dom0 scripts
-Requires:   gcab
-Requires:   fwupd >= 1.5.7
+Requires:   fwupd >= 2.0.0
 Requires:   libjcat >= 0.1.6
 Requires:   python3-packaging
 Requires:   sequoia-sqv
@@ -225,8 +217,7 @@ fwupd wrapper for Qubes OS
 
 %package qubes-vm
 Summary: fwupd wrapper for Qubes OS - VM scripts
-Requires:   gcab
-Requires:   fwupd >= 1.5.7
+Requires:   fwupd >= 2.0.0
 Requires:   libjcat >= 0.1.6
 Requires:   python3-packaging
 
@@ -242,17 +233,17 @@ fwupd wrapper for Qubes OS
 %meson \
 %if 0%{?enable_ci}
     --werror \
+    -Db_coverage=true \
+    -Db_sanitize=address,undefined \
+%else
+    -Dsupported_build=enabled \
 %endif
+    -Dumockdev_tests=disabled \
     -Ddocs=enabled \
 %if 0%{?enable_tests}
     -Dtests=true \
 %else
     -Dtests=false \
-%endif
-%if 0%{?enable_dummy}
-    -Dplugin_dummy=true \
-%else
-    -Dplugin_dummy=false \
 %endif
 %if 0%{?have_flashrom}
     -Dplugin_flashrom=enabled \
@@ -273,29 +264,29 @@ fwupd wrapper for Qubes OS
     -Dplugin_uefi_capsule=enabled \
     -Dplugin_uefi_pk=enabled \
     -Dplugin_tpm=enabled \
-    -Defi_binary=false \
 %else
     -Dplugin_uefi_capsule=disabled \
     -Dplugin_uefi_pk=disabled \
     -Dplugin_tpm=disabled \
-%endif
-%if 0%{?have_dell}
-    -Dplugin_dell=enabled \
-%else
-    -Dplugin_dell=disabled \
 %endif
 %if 0%{?have_modem_manager}
     -Dplugin_modem_manager=enabled \
 %else
     -Dplugin_modem_manager=disabled \
 %endif
+%if 0%{?have_passim}
+    -Dpassim=enabled \
+%else
+    -Dpassim=disabled \
+%endif
 %if 0%{?qubes_packages}
     -Dqubes=true \
 %endif
     -Dman=true \
+    -Dsystemd_unit_user="" \
     -Dbluez=enabled \
     -Dplugin_powerd=disabled \
-    -Dsupported_build=enabled
+    -Dlaunchd=disabled
 
 %meson_build
 
@@ -318,20 +309,17 @@ mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/cache/fwupd
 %find_lang %{name}
 
 %post
-%systemd_post fwupd.service
-
-# change vendor-installed remotes to use the default keyring type
-for fn in /etc/fwupd/remotes.d/*.conf; do
-    if grep -q "Keyring=gpg" "$fn"; then
-        sed -i 's/Keyring=gpg/#Keyring=pkcs/g' "$fn";
-    fi
-done
+%systemd_post fwupd.service fwupd-refresh.timer
 
 %preun
-%systemd_preun fwupd.service
+%systemd_preun fwupd.service fwupd-refresh.timer
 
 %postun
-%systemd_postun_with_restart fwupd.service
+%systemd_postun_with_restart fwupd.service fwupd-refresh.timer
+
+%triggerun -- fedora-release-common < 39-0.28
+# For upgrades from versions before fwupd-refresh.timer was enabled by default
+systemctl --no-reload preset fwupd-refresh.timer &>/dev/null || :
 
 %files -f %{name}.lang
 %doc README.md
@@ -339,25 +327,18 @@ done
 %config(noreplace)%{_sysconfdir}/fwupd/fwupd.conf
 %dir %{_libexecdir}/fwupd
 %{_libexecdir}/fwupd/fwupd
-%ifarch i686 x86_64
+%ifarch x86_64
 %{_libexecdir}/fwupd/fwupd-detect-cet
 %endif
-%{_libexecdir}/fwupd/fwupdoffline
-%if 0%{?have_uefi}
 %{_bindir}/dbxtool
-%endif
 %{_bindir}/fwupdmgr
 %{_bindir}/fwupdtool
 %dir %{_sysconfdir}/fwupd
 %dir %{_sysconfdir}/fwupd/bios-settings.d
 %{_sysconfdir}/fwupd/bios-settings.d/README.md
 %dir %{_sysconfdir}/fwupd/remotes.d
-%if 0%{?have_dell}
-%config(noreplace)%{_sysconfdir}/fwupd/remotes.d/dell-esrt.conf
-%endif
 %config(noreplace)%{_sysconfdir}/fwupd/remotes.d/lvfs.conf
 %config(noreplace)%{_sysconfdir}/fwupd/remotes.d/lvfs-testing.conf
-%config(noreplace)%{_sysconfdir}/fwupd/remotes.d/vendor.conf
 %config(noreplace)%{_sysconfdir}/fwupd/remotes.d/vendor-directory.conf
 %config(noreplace)%{_sysconfdir}/pki/fwupd
 %{_sysconfdir}/pki/fwupd-metadata
@@ -368,33 +349,31 @@ done
 %{_datadir}/bash-completion/completions/fwupdmgr
 %{_datadir}/bash-completion/completions/fwupdtool
 %{_datadir}/fish/vendor_completions.d/fwupdmgr.fish
+%dir %{_datadir}/fwupd
+%dir %{_datadir}/fwupd/metainfo
 %{_datadir}/fwupd/metainfo/org.freedesktop.fwupd*.metainfo.xml
-%if 0%{?have_dell}
-%{_datadir}/fwupd/remotes.d/dell-esrt/metadata.xml
-%endif
+%dir %{_datadir}/fwupd/remotes.d
+%dir %{_datadir}/fwupd/remotes.d/vendor
+%dir %{_datadir}/fwupd/remotes.d/vendor/firmware
 %{_datadir}/fwupd/remotes.d/vendor/firmware/README.md
 %{_datadir}/dbus-1/interfaces/org.freedesktop.fwupd.xml
 %{_datadir}/polkit-1/actions/org.freedesktop.fwupd.policy
 %{_datadir}/polkit-1/rules.d/org.freedesktop.fwupd.rules
 %{_datadir}/dbus-1/system-services/org.freedesktop.fwupd.service
 %{_mandir}/man1/fwupdtool.1*
-%if 0%{?have_uefi}
 %{_mandir}/man1/dbxtool.*
-%endif
 %{_mandir}/man1/fwupdmgr.1*
 %{_mandir}/man5/*
+%{_mandir}/man8/*
 %{_datadir}/metainfo/org.freedesktop.fwupd.metainfo.xml
-%{_datadir}/icons/hicolor/scalable/apps/org.freedesktop.fwupd.svg
+%{_datadir}/icons/hicolor/*/apps/org.freedesktop.fwupd.*
 %{_datadir}/fwupd/firmware_packager.py
 %{_datadir}/fwupd/simple_client.py
 %{_datadir}/fwupd/add_capsule_header.py
 %{_datadir}/fwupd/install_dell_bios_exe.py
-%{_unitdir}/fwupd-offline-update.service
 %{_unitdir}/fwupd.service
 %{_unitdir}/fwupd-refresh.service
 %{_unitdir}/fwupd-refresh.timer
-%{_presetdir}/fwupd-refresh.preset
-%{_unitdir}/system-update.target.wants/
 %dir %{_localstatedir}/lib/fwupd
 %dir %{_localstatedir}/cache/fwupd
 %dir %{_datadir}/fwupd/quirks.d
@@ -403,9 +382,8 @@ done
 %if 0%{?have_uefi}
 %config(noreplace)%{_sysconfdir}/grub.d/35_fwupd
 %endif
-%{_libdir}/libfwupd.so.2*
+%{_libdir}/libfwupd.so.3*
 %{_libdir}/girepository-1.0/Fwupd-2.0.typelib
-/usr/lib/udev/rules.d/*.rules
 /usr/lib/systemd/system-shutdown/fwupd.shutdown
 %dir %{_libdir}/fwupd-%{version}
 %{_libdir}/fwupd-%{version}/libfwupd*.so
@@ -431,31 +409,16 @@ done
 %{_datadir}/doc/libfwupdplugin
 %{_datadir}/doc/libfwupd
 %{_datadir}/vala/vapi
-%{_includedir}/fwupd-1
+%{_includedir}/fwupd-3
 %{_libdir}/libfwupd*.so
 %{_libdir}/pkgconfig/fwupd.pc
 
 %files tests
 %if 0%{?enable_tests}
 %{_datadir}/fwupd/host-emulate.d/*.json.gz
-%dir %{_datadir}/installed-tests/fwupd
-%{_datadir}/installed-tests/fwupd/tests/*
-%{_datadir}/installed-tests/fwupd/fwupd-tests.xml
-%{_datadir}/installed-tests/fwupd/*.test
-%{_datadir}/installed-tests/fwupd/*.cab
-%{_datadir}/installed-tests/fwupd/*.sh
-%{_datadir}/installed-tests/fwupd/*.zip
-%if 0%{?have_uefi}
-%{_datadir}/installed-tests/fwupd/efi
-%endif
-%{_datadir}/installed-tests/fwupd/chassis_type
-%{_datadir}/installed-tests/fwupd/sys_vendor
-%if 0%{?fedora} >= 37
-%{_datadir}/fwupd/device-tests/*.json
-%endif
-%{_libexecdir}/installed-tests/fwupd/*
-%dir %{_sysconfdir}/fwupd/remotes.d
-%config(noreplace)%{_sysconfdir}/fwupd/remotes.d/fwupd-tests.conf
+%{_datadir}/installed-tests/fwupd
+%{_libexecdir}/installed-tests/fwupd
+%{_datadir}/fwupd/remotes.d/fwupd-tests.conf
 %endif
 
 %if 0%{?qubes_packages}

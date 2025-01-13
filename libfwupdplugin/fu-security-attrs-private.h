@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2020 Richard Hughes <richard@hughsie.com>
+ * Copyright 2020 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #pragma once
@@ -25,12 +25,18 @@ typedef enum {
 FuSecurityAttrs *
 fu_security_attrs_new(void);
 gchar *
-fu_security_attrs_calculate_hsi(FuSecurityAttrs *self, FuSecurityAttrsFlags flags);
+fu_security_attrs_calculate_hsi(FuSecurityAttrs *self, FuSecurityAttrsFlags flags)
+    G_GNUC_NON_NULL(1);
 void
-fu_security_attrs_depsolve(FuSecurityAttrs *self);
+fu_security_attrs_depsolve(FuSecurityAttrs *self) G_GNUC_NON_NULL(1);
 GVariant *
-fu_security_attrs_to_variant(FuSecurityAttrs *self);
+fu_security_attrs_to_variant(FuSecurityAttrs *self) G_GNUC_NON_NULL(1);
 GPtrArray *
-fu_security_attrs_get_all(FuSecurityAttrs *self);
+fu_security_attrs_get_all(FuSecurityAttrs *self) G_GNUC_NON_NULL(1);
 void
-fu_security_attrs_append_internal(FuSecurityAttrs *self, FwupdSecurityAttr *attr);
+fu_security_attrs_append_internal(FuSecurityAttrs *self, FwupdSecurityAttr *attr)
+    G_GNUC_NON_NULL(1, 2);
+gboolean
+fu_security_attrs_equal(FuSecurityAttrs *attrs1, FuSecurityAttrs *attrs2) G_GNUC_NON_NULL(1, 2);
+GPtrArray *
+fu_security_attrs_compare(FuSecurityAttrs *attrs1, FuSecurityAttrs *attrs2) G_GNUC_NON_NULL(1, 2);

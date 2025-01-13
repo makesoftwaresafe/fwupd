@@ -17,7 +17,7 @@ These devices use the following instance values:
 
 * `EMMC\NAME_%name%`
 * `EMMC\NAME_%name%&REV_%rev%`
-* `EMMC\MAN_%manfid%&OEM_%oemid%`
+* `EMMC\MAN_%manfid%&OEM_%oemid%` (only-quirk)
 * `EMMC\MAN_%manfid%&OEM_%oemid%&NAME_%name%`
 * `EMMC\MAN_%manfid%&NAME_%name%&REV_%rev%`
 * `EMMC\MAN_%manfid%&OEM_%oemid%&NAME_%name%&REV_%rev%`
@@ -30,6 +30,16 @@ One deprecated instance ID is also added; new firmware should not use this.
 
 The firmware is deployed when the device is in normal runtime mode, but it is
 only activated when the device is rebooted.
+
+## Quirk Use
+
+This plugin uses the following plugin-specific quirks:
+
+### EmmcBlockSize
+
+The block size used for Emmc  writes
+
+Since: 1.9.7
 
 ## Vendor ID Security
 

@@ -1,13 +1,11 @@
 /*
- * Copyright (C) 2020 Richard Hughes <richard@hughsie.com>
- * Copyright (c) 2020 Synaptics Incorporated.
+ * Copyright 2020 Richard Hughes <richard@hughsie.com>
+ * Copyright 2020 Synaptics Incorporated.
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #include "config.h"
-
-#include <fwupdplugin.h>
 
 #include "fu-synaptics-rmi-ps2-device.h"
 #include "fu-synaptics-rmi-v5-device.h"
@@ -15,7 +13,6 @@
 
 struct _FuSynapticsRmiPs2Device {
 	FuSynapticsRmiDevice parent_instance;
-	FuIOChannel *io_channel;
 };
 
 G_DEFINE_TYPE(FuSynapticsRmiPs2Device, fu_synaptics_rmi_ps2_device, FU_TYPE_SYNAPTICS_RMI_DEVICE)
@@ -103,19 +100,22 @@ enum EStickDeviceType {
 	esdtUnknown = 0xFFFFFFFF
 };
 
+#define FU_SYNAPTICS_RMI_DEVICE_BIND_TIMEOUT 1000 /* ms */
+
 static gboolean
 fu_synaptics_rmi_ps2_device_read_ack(FuSynapticsRmiPs2Device *self, guint8 *pbuf, GError **error)
 {
+	FuIOChannel *io_channel = fu_udev_device_get_io_channel(FU_UDEV_DEVICE(self));
 	for (guint i = 0; i < 60; i++) {
 		g_autoptr(GError) error_local = NULL;
-		if (!fu_io_channel_read_raw(self->io_channel,
+		if (!fu_io_channel_read_raw(io_channel,
 					    pbuf,
 					    0x1,
 					    NULL,
 					    10,
 					    FU_IO_CHANNEL_FLAG_USE_BLOCKING_IO,
 					    &error_local)) {
-			if (g_error_matches(error_local, G_IO_ERROR, G_IO_ERROR_TIMED_OUT)) {
+			if (g_error_matches(error_local, FWUPD_ERROR, FWUPD_ERROR_TIMED_OUT)) {
 				g_warning("read timed out: %u", i);
 				fu_device_sleep(FU_DEVICE(self), 1); /* ms */
 				continue;
@@ -125,7 +125,7 @@ fu_synaptics_rmi_ps2_device_read_ack(FuSynapticsRmiPs2Device *self, guint8 *pbuf
 		}
 		return TRUE;
 	}
-	g_set_error(error, G_IO_ERROR, G_IO_ERROR_TIMED_OUT, "read timed out");
+	g_set_error(error, FWUPD_ERROR, FWUPD_ERROR_TIMED_OUT, "read timed out");
 	return FALSE;
 }
 
@@ -136,8 +136,9 @@ fu_synaptics_rmi_ps2_device_read_byte(FuSynapticsRmiPs2Device *self,
 				      guint timeout,
 				      GError **error)
 {
+	FuIOChannel *io_channel = fu_udev_device_get_io_channel(FU_UDEV_DEVICE(self));
 	g_return_val_if_fail(timeout > 0, FALSE);
-	return fu_io_channel_read_raw(self->io_channel,
+	return fu_io_channel_read_raw(io_channel,
 				      pbuf,
 				      0x1,
 				      NULL,
@@ -154,13 +155,14 @@ fu_synaptics_rmi_ps2_device_write_byte(FuSynapticsRmiPs2Device *self,
 				       FuSynapticsRmiDeviceFlags flags,
 				       GError **error)
 {
+	FuIOChannel *io_channel = fu_udev_device_get_io_channel(FU_UDEV_DEVICE(self));
 	gboolean do_write = TRUE;
 	g_return_val_if_fail(timeout > 0, FALSE);
 	for (guint i = 0;; i++) {
 		guint8 res = 0;
 		g_autoptr(GError) error_local = NULL;
 		if (do_write) {
-			if (!fu_io_channel_write_raw(self->io_channel,
+			if (!fu_io_channel_write_raw(io_channel,
 						     &buf,
 						     sizeof(buf),
 						     timeout,
@@ -284,7 +286,7 @@ fu_synaptics_rmi_ps2_device_status_request_sequence(FuSynapticsRmiPs2Device *sel
 		break;
 	}
 	if (success == FALSE) {
-		g_set_error(error, G_IO_ERROR, G_IO_ERROR_FAILED, "failed");
+		g_set_error(error, FWUPD_ERROR, FWUPD_ERROR_INTERNAL, "failed");
 		return FALSE;
 	}
 
@@ -687,8 +689,8 @@ fu_synaptics_rmi_ps2_device_read(FuSynapticsRmiDevice *rmi_device,
 			g_debug("buf->len(%u) != req_sz(%u)", buf->len, (guint)req_sz);
 			if (retries++ > 2) {
 				g_set_error(error,
-					    G_IO_ERROR,
-					    G_IO_ERROR_FAILED,
+					    FWUPD_ERROR,
+					    FWUPD_ERROR_INVALID_DATA,
 					    "buffer length did not match: %u vs %u",
 					    buf->len,
 					    (guint)req_sz);
@@ -783,9 +785,7 @@ fu_synaptics_rmi_ps2_device_probe(FuDevice *device, GError **error)
 	} else {
 		fu_device_remove_flag(device, FWUPD_DEVICE_FLAG_IS_BOOTLOADER);
 	}
-
-	/* set the physical ID */
-	return fu_udev_device_set_physical_id(FU_UDEV_DEVICE(device), "platform", error);
+	return TRUE;
 }
 
 static gboolean
@@ -797,9 +797,6 @@ fu_synaptics_rmi_ps2_device_open(FuDevice *device, GError **error)
 	/* FuUdevDevice->open */
 	if (!FU_DEVICE_CLASS(fu_synaptics_rmi_ps2_device_parent_class)->open(device, error))
 		return FALSE;
-
-	/* create channel */
-	self->io_channel = fu_io_channel_unix_new(fu_udev_device_get_fd(FU_UDEV_DEVICE(device)));
 
 	/* in serio_raw mode */
 	if (fu_device_has_flag(device, FWUPD_DEVICE_FLAG_IS_BOOTLOADER)) {
@@ -828,8 +825,8 @@ fu_synaptics_rmi_ps2_device_open(FuDevice *device, GError **error)
 		}
 		if (buf[0] != 0xAA || buf[1] != 0x00) {
 			g_set_error(error,
-				    G_IO_ERROR,
-				    G_IO_ERROR_FAILED,
+				    FWUPD_ERROR,
+				    FWUPD_ERROR_INVALID_DATA,
 				    "failed to read 0xAA00, got 0x%02X%02X: ",
 				    buf[0],
 				    buf[1]);
@@ -852,17 +849,6 @@ fu_synaptics_rmi_ps2_device_open(FuDevice *device, GError **error)
 }
 
 static gboolean
-fu_synaptics_rmi_ps2_device_close(FuDevice *device, GError **error)
-{
-	FuSynapticsRmiPs2Device *self = FU_SYNAPTICS_RMI_PS2_DEVICE(device);
-	fu_udev_device_set_fd(FU_UDEV_DEVICE(device), -1);
-	g_clear_object(&self->io_channel);
-
-	/* FuUdevDevice->close */
-	return FU_DEVICE_CLASS(fu_synaptics_rmi_ps2_device_parent_class)->close(device, error);
-}
-
-static gboolean
 fu_synaptics_rmi_ps2_device_detach(FuDevice *device, FuProgress *progress, GError **error)
 {
 	FuSynapticsRmiDevice *self = FU_SYNAPTICS_RMI_DEVICE(device);
@@ -875,7 +861,11 @@ fu_synaptics_rmi_ps2_device_detach(FuDevice *device, FuProgress *progress, GErro
 	}
 
 	/* put in serio_raw mode so that we can do register writes */
-	if (!fu_udev_device_write_sysfs(FU_UDEV_DEVICE(device), "drvctl", "serio_raw", error)) {
+	if (!fu_udev_device_write_sysfs(FU_UDEV_DEVICE(device),
+					"drvctl",
+					"serio_raw",
+					FU_SYNAPTICS_RMI_DEVICE_BIND_TIMEOUT,
+					error)) {
 		g_prefix_error(error, "failed to write to drvctl: ");
 		return FALSE;
 	}
@@ -959,7 +949,11 @@ fu_synaptics_rmi_ps2_device_attach(FuDevice *device, FuProgress *progress, GErro
 	fu_device_sleep_full(device, 5000, progress); /* ms */
 
 	/* back to psmouse */
-	if (!fu_udev_device_write_sysfs(FU_UDEV_DEVICE(device), "drvctl", "psmouse", error)) {
+	if (!fu_udev_device_write_sysfs(FU_UDEV_DEVICE(device),
+					"drvctl",
+					"psmouse",
+					FU_SYNAPTICS_RMI_DEVICE_BIND_TIMEOUT,
+					error)) {
 		g_prefix_error(error, "failed to write to drvctl: ");
 		return FALSE;
 	}
@@ -974,10 +968,10 @@ fu_synaptics_rmi_ps2_device_init(FuSynapticsRmiPs2Device *self)
 	fu_device_add_flag(FU_DEVICE(self), FWUPD_DEVICE_FLAG_INTERNAL);
 	fu_device_set_name(FU_DEVICE(self), "TouchStyk");
 	fu_device_set_vendor(FU_DEVICE(self), "Synaptics");
-	fu_device_add_vendor_id(FU_DEVICE(self), "HIDRAW:0x06CB");
+	fu_device_build_vendor_id_u16(FU_DEVICE(self), "HIDRAW", 0x06CB);
 	fu_synaptics_rmi_device_set_max_page(FU_SYNAPTICS_RMI_DEVICE(self), 0x1);
-	fu_udev_device_set_flags(FU_UDEV_DEVICE(self),
-				 FU_UDEV_DEVICE_FLAG_OPEN_READ | FU_UDEV_DEVICE_FLAG_OPEN_WRITE);
+	fu_udev_device_add_open_flag(FU_UDEV_DEVICE(self), FU_IO_CHANNEL_OPEN_FLAG_READ);
+	fu_udev_device_add_open_flag(FU_UDEV_DEVICE(self), FU_IO_CHANNEL_OPEN_FLAG_WRITE);
 }
 
 static gboolean
@@ -993,22 +987,21 @@ fu_synaptics_rmi_ps2_device_wait_for_attr(FuSynapticsRmiDevice *rmi_device,
 static void
 fu_synaptics_rmi_ps2_device_class_init(FuSynapticsRmiPs2DeviceClass *klass)
 {
-	FuDeviceClass *klass_device = FU_DEVICE_CLASS(klass);
-	FuSynapticsRmiDeviceClass *klass_rmi = FU_SYNAPTICS_RMI_DEVICE_CLASS(klass);
-	klass_device->attach = fu_synaptics_rmi_ps2_device_attach;
-	klass_device->detach = fu_synaptics_rmi_ps2_device_detach;
-	klass_device->setup = fu_synaptics_rmi_ps2_device_setup;
-	klass_device->probe = fu_synaptics_rmi_ps2_device_probe;
-	klass_device->open = fu_synaptics_rmi_ps2_device_open;
-	klass_device->close = fu_synaptics_rmi_ps2_device_close;
-	klass_rmi->read = fu_synaptics_rmi_ps2_device_read;
-	klass_rmi->write = fu_synaptics_rmi_ps2_device_write;
-	klass_rmi->set_page = fu_synaptics_rmi_ps2_device_set_page;
-	klass_rmi->query_status = fu_synaptics_rmi_ps2_device_query_status;
-	klass_rmi->query_build_id = fu_synaptics_rmi_ps2_device_query_build_id;
-	klass_rmi->query_product_sub_id = fu_synaptics_rmi_ps2_device_query_product_sub_id;
-	klass_rmi->wait_for_attr = fu_synaptics_rmi_ps2_device_wait_for_attr;
-	klass_rmi->enter_iep_mode = fu_synaptics_rmi_ps2_device_enter_iep_mode;
-	klass_rmi->write_bus_select = fu_synaptics_rmi_ps2_device_write_bus_select;
-	klass_rmi->read_packet_register = fu_synaptics_rmi_ps2_device_read_packet_register;
+	FuDeviceClass *device_class = FU_DEVICE_CLASS(klass);
+	FuSynapticsRmiDeviceClass *rmi_class = FU_SYNAPTICS_RMI_DEVICE_CLASS(klass);
+	device_class->attach = fu_synaptics_rmi_ps2_device_attach;
+	device_class->detach = fu_synaptics_rmi_ps2_device_detach;
+	device_class->setup = fu_synaptics_rmi_ps2_device_setup;
+	device_class->probe = fu_synaptics_rmi_ps2_device_probe;
+	device_class->open = fu_synaptics_rmi_ps2_device_open;
+	rmi_class->read = fu_synaptics_rmi_ps2_device_read;
+	rmi_class->write = fu_synaptics_rmi_ps2_device_write;
+	rmi_class->set_page = fu_synaptics_rmi_ps2_device_set_page;
+	rmi_class->query_status = fu_synaptics_rmi_ps2_device_query_status;
+	rmi_class->query_build_id = fu_synaptics_rmi_ps2_device_query_build_id;
+	rmi_class->query_product_sub_id = fu_synaptics_rmi_ps2_device_query_product_sub_id;
+	rmi_class->wait_for_attr = fu_synaptics_rmi_ps2_device_wait_for_attr;
+	rmi_class->enter_iep_mode = fu_synaptics_rmi_ps2_device_enter_iep_mode;
+	rmi_class->write_bus_select = fu_synaptics_rmi_ps2_device_write_bus_select;
+	rmi_class->read_packet_register = fu_synaptics_rmi_ps2_device_read_packet_register;
 }

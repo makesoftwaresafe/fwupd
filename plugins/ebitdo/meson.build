@@ -1,5 +1,5 @@
-if gusb.found()
 cargs = ['-DG_LOG_DOMAIN="FuPluginEbitdo"']
+plugins += {meson.current_source_dir().split('/')[-1]: true}
 
 plugin_quirks += files('ebitdo.quirk')
 plugin_builtins += static_library('fu_plugin_ebitdo',
@@ -8,7 +8,6 @@ plugin_builtins += static_library('fu_plugin_ebitdo',
   ),
   sources: [
     'fu-ebitdo-plugin.c',
-    'fu-ebitdo-common.c',
     'fu-ebitdo-device.c',
     'fu-ebitdo-firmware.c',     # fuzzing
   ],
@@ -17,4 +16,7 @@ plugin_builtins += static_library('fu_plugin_ebitdo',
   c_args: cargs,
   dependencies: plugin_deps,
 )
-endif
+device_tests += files('tests/8bitdo-nes30pro.json',
+                      'tests/8bitdo-sf30pro.json',
+                      'tests/8bitdo-sfc30.json',
+)

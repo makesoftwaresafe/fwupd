@@ -1,12 +1,10 @@
 /*
- * Copyright (C) 2018 Richard Hughes <richard@hughsie.com>
+ * Copyright 2018 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #include "config.h"
-
-#include <fwupdplugin.h>
 
 #include <string.h>
 
@@ -28,8 +26,8 @@ fu_wac_module_touch_write_firmware(FuDevice *device,
 				   GError **error)
 {
 	FuWacModule *self = FU_WAC_MODULE(device);
-	g_autoptr(GBytes) fw = NULL;
-	g_autoptr(GPtrArray) chunks = NULL;
+	g_autoptr(GInputStream) stream = NULL;
+	g_autoptr(FuChunkArray) chunks = NULL;
 
 	/* progress */
 	fu_progress_set_id(progress, G_STRLOC);
@@ -41,22 +39,26 @@ fu_wac_module_touch_write_firmware(FuDevice *device,
 	g_debug("using element at addr 0x%0x", (guint)fu_firmware_get_addr(firmware));
 
 	/* build each data packet */
-	fw = fu_firmware_get_bytes(firmware, error);
-	if (fw == NULL) {
-		g_prefix_error(error, "wacom touch module failed to get bytes: ");
+	stream = fu_firmware_get_stream(firmware, error);
+	if (stream == NULL) {
+		g_prefix_error(error, "wacom touch module failed to get stream: ");
 		return FALSE;
 	}
-	chunks = fu_chunk_array_new_from_bytes(fw,
-					       fu_firmware_get_addr(firmware),
-					       0x0,  /* page_sz */
-					       128); /* packet_sz */
+	chunks = fu_chunk_array_new_from_stream(stream,
+						fu_firmware_get_addr(firmware),
+						FU_CHUNK_PAGESZ_NONE,
+						128,
+						error);
+	if (chunks == NULL)
+		return FALSE;
 
 	/* start, which will erase the module */
 	if (!fu_wac_module_set_feature(self,
 				       FU_WAC_MODULE_COMMAND_START,
 				       NULL,
 				       fu_progress_get_child(progress),
-				       FU_WAC_MODULE_ERASE_TIMEOUT,
+				       FU_WAC_MODULE_POLL_INTERVAL,
+				       FU_WAC_MODULE_START_TIMEOUT,
 				       error)) {
 		g_prefix_error(error, "wacom touch module failed to erase: ");
 		return FALSE;
@@ -64,10 +66,15 @@ fu_wac_module_touch_write_firmware(FuDevice *device,
 	fu_progress_step_done(progress);
 
 	/* data */
-	for (guint i = 0; i < chunks->len; i++) {
-		FuChunk *chk = g_ptr_array_index(chunks, i);
+	for (guint i = 0; i < fu_chunk_array_length(chunks); i++) {
+		g_autoptr(FuChunk) chk = NULL;
 		guint8 buf[128 + 7] = {0xff};
 		g_autoptr(GBytes) blob_chunk = NULL;
+
+		/* prepare chunk */
+		chk = fu_chunk_array_index(chunks, i, error);
+		if (chk == NULL)
+			return FALSE;
 
 		/* build G11T data packet */
 		memset(buf, 0xff, sizeof(buf));
@@ -91,7 +98,8 @@ fu_wac_module_touch_write_firmware(FuDevice *device,
 					       FU_WAC_MODULE_COMMAND_DATA,
 					       blob_chunk,
 					       fu_progress_get_child(progress),
-					       FU_WAC_MODULE_WRITE_TIMEOUT,
+					       FU_WAC_MODULE_POLL_INTERVAL,
+					       FU_WAC_MODULE_DATA_TIMEOUT,
 					       error)) {
 			g_prefix_error(error, "failed to write block %u: ", fu_chunk_get_idx(chk));
 			return FALSE;
@@ -100,7 +108,7 @@ fu_wac_module_touch_write_firmware(FuDevice *device,
 		/* update progress */
 		fu_progress_set_percentage_full(fu_progress_get_child(progress),
 						i + 1,
-						chunks->len);
+						fu_chunk_array_length(chunks));
 	}
 	fu_progress_step_done(progress);
 
@@ -109,7 +117,8 @@ fu_wac_module_touch_write_firmware(FuDevice *device,
 				       FU_WAC_MODULE_COMMAND_END,
 				       NULL,
 				       fu_progress_get_child(progress),
-				       FU_WAC_MODULE_FINISH_TIMEOUT,
+				       FU_WAC_MODULE_POLL_INTERVAL,
+				       FU_WAC_MODULE_END_TIMEOUT,
 				       error)) {
 		g_prefix_error(error, "wacom touch module failed to end: ");
 		return FALSE;
@@ -131,8 +140,8 @@ fu_wac_module_touch_init(FuWacModuleTouch *self)
 static void
 fu_wac_module_touch_class_init(FuWacModuleTouchClass *klass)
 {
-	FuDeviceClass *klass_device = FU_DEVICE_CLASS(klass);
-	klass_device->write_firmware = fu_wac_module_touch_write_firmware;
+	FuDeviceClass *device_class = FU_DEVICE_CLASS(klass);
+	device_class->write_firmware = fu_wac_module_touch_write_firmware;
 }
 
 FuWacModule *

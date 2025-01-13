@@ -4,28 +4,31 @@ endif
 
 client_src = []
 systemd_src = []
-daemon_dep = [
+engine_dep = [
   libarchive,
   libjcat,
   libxmlb,
-  libgcab,
   giounix,
   gmodule,
-  gudev,
-  gusb,
+  libusb,
   libjsonglib,
   polkit,
   sqlite,
   cbor,
+  fwupdplugin_rs_dep,
 ]
 
+if get_option('passim').allowed()
+  engine_dep += passim
+endif
+
 client_dep = [
-  gudev,
-  gusb,
   libcurl,
+  libjcat,
   libjsonglib,
   libxmlb,
   sqlite,
+  fwupdplugin_rs_dep,
 ]
 if libsystemd.found()
   systemd_src += 'fu-systemd.c'
@@ -35,28 +38,34 @@ if polkit.found()
 endif
 
 fwupd_engine_src = [
-  'fu-cabinet-common.c',
+  'fu-cabinet.c',
   'fu-debug.c',
   'fu-device-list.c',
   'fu-engine.c',
   'fu-engine-config.c',
+  'fu-engine-emulator.c',
   'fu-engine-helper.c',
   'fu-engine-request.c',
   'fu-history.c',
   'fu-idle.c',
   'fu-polkit-authority.c',
   'fu-release.c',
+  'fu-engine-requirements.c',
   'fu-release-common.c',
   'fu-plugin-list.c',
+  'fu-remote.c',
   'fu-remote-list.c',
   'fu-security-attr-common.c',
+  'fu-usb-backend.c',
+  'fu-client.c',
+  'fu-client-list.c',
 ] + systemd_src
 
-if gudev.found()
-  fwupd_engine_src += 'fu-udev-backend.c'
+if giounix.found()
+  fwupd_engine_src += 'fu-unix-seekable-input-stream.c'
 endif
-if gusb.found()
-  fwupd_engine_src += 'fu-usb-backend.c'
+if enable_udev
+  fwupd_engine_src += 'fu-udev-backend.c'
 endif
 if bluez.allowed()
   fwupd_engine_src += 'fu-bluez-backend.c'
@@ -80,7 +89,6 @@ fwupdutil = library(
   'fwupdutil',
   sources: [
     'fu-console.c',
-    'fu-security-attr-common.c',
     'fu-util-bios-setting.c',
     'fu-util-common.c',
     systemd_src,
@@ -102,10 +110,19 @@ fwupdutil = library(
   ],
 )
 
-if build_daemon
-install_data(['org.freedesktop.fwupd.xml'],
-  install_dir: join_paths(datadir, 'dbus-1', 'interfaces')
+dbus_interface = custom_target('fwupd-generate-dbus-interface',
+  input : 'org.freedesktop.fwupd.xml',
+  output : 'org.freedesktop.fwupd.xml',
+  command : [
+    generate_dbus_interface,
+    '@INPUT@',
+    '@OUTPUT@',
+  ],
+  install: build_daemon,
+  install_dir: join_paths(datadir, 'dbus-1', 'interfaces'),
 )
+
+if build_daemon
 fwupdmgr = executable(
   'fwupdmgr',
   sources: [
@@ -130,50 +147,13 @@ fwupdmgr = executable(
   install_rpath: libdir_pkg,
   install_dir: bindir
 )
-
-# for compatibility
-if get_option('compat_cli')
-  install_symlink('fwupdagent',
-    install_dir: join_paths(get_option('prefix'), get_option('bindir')),
-    pointing_to: 'fwupdmgr',
-  )
-endif
-endif
-
-if offline.allowed()
-fwupdoffline = executable(
-  'fwupdoffline',
-  sources: [
-    'fu-history.c',
-    'fu-offline.c',
-    'fu-spawn.c',
-    systemd_src
-  ],
-  include_directories: [
-    root_incdir,
-    fwupd_incdir,
-    fwupdplugin_incdir,
-  ],
-  dependencies: [
-    libfwupd_deps,
-    client_dep,
-  ],
-  link_with: [
-    fwupd,
-    fwupdplugin,
-    fwupdutil,
-  ],
-  install: true,
-  install_rpath: libdir_pkg,
-  install_dir: join_paths(libexecdir, 'fwupd')
-)
 endif
 
 resources_src = gnome.compile_resources(
   'fwupd-resources',
   'fwupd.gresource.xml',
-  source_dir: '.',
-  c_name: 'fu'
+  c_name: 'fu',
+  dependencies: [dbus_interface],
 )
 
 # generate a header file that allows us to instantiate the plugins without copy-pasting or
@@ -185,9 +165,9 @@ endforeach
 plugins_hdr = custom_target('fwupd-generate-plugins-header',
   output : 'fu-plugin-builtin.h',
   command : [
-    join_paths(meson.project_source_root(), 'contrib', 'generate-plugins-header.py'),
+    generate_plugins_header,
     '@OUTPUT@',
-    meson.project_source_root(),
+    '.',
     ','.join(plugin_names),
   ],
 )
@@ -213,7 +193,7 @@ fwupdengine = library(
   install_dir: libdir_pkg,
   include_directories: plugin_incdirs,
   dependencies: [
-    daemon_dep,
+    engine_dep,
   ],
   link_whole: [
     plugin_builtins,
@@ -227,7 +207,6 @@ fwupdengine = library(
 fwupdtool = executable(
   'fwupdtool',
   fwupdengine_rs,
-  resources_src,
   plugins_hdr,
   export_dynamic: true,
   sources: [
@@ -240,7 +219,6 @@ fwupdtool = executable(
   ],
   dependencies: [
     libfwupd_deps,
-    libgcab,
     libarchive,
     client_dep,
     valgrind,
@@ -255,8 +233,8 @@ fwupdtool = executable(
   install_dir: bindir
 )
 
-if get_option('man')
-  if build_daemon
+if build_daemon
+  if get_option('man')
     custom_target('fwupdmgr.1',
       input: 'fwupdmgr.md',
       output: 'fwupdmgr.1',
@@ -268,19 +246,21 @@ if get_option('man')
       install_dir: join_paths(mandir, 'man1'),
     )
   endif
-  if build_daemon and get_option('compat_cli')
-    custom_target('fwupdagent.1',
-      input: 'fwupdagent.md',
-      output: 'fwupdagent.1',
-      command: [
-        generate_man, '@INPUT@', '-o', '@OUTPUT@',
-        '--replace', 'PACKAGE_VERSION', fwupd_version,
-      ],
-      install: true,
-      install_dir: join_paths(mandir, 'man1'),
-    )
+  if build_docs
+      md_targets += custom_target('fwupdmgr.md',
+        input: 'fwupdmgr.md',
+        output: 'fwupdmgr.md',
+        command: [
+          generate_man, '@INPUT@', '-o', '@OUTPUT@',
+          '--replace', 'PACKAGE_VERSION', fwupd_version,
+          '--md',
+        ],
+      )
+      man_md += ['"fwupdmgr.md"']
   endif
-  if build_standalone
+endif
+if build_standalone
+  if get_option('man')
     custom_target('fwupdtool.1',
       input: 'fwupdtool.md',
       output: 'fwupdtool.1',
@@ -291,6 +271,18 @@ if get_option('man')
       install: true,
       install_dir: join_paths(mandir, 'man1'),
     )
+  endif
+  if build_docs
+    md_targets += custom_target('fwupdtool.md',
+      input: 'fwupdtool.md',
+      output: 'fwupdtool.md',
+      command: [
+        generate_man, '@INPUT@', '-o', '@OUTPUT@',
+        '--replace', 'PACKAGE_VERSION', fwupd_version,
+        '--md',
+      ],
+    )
+    man_md += ['"fwupdtool.md"']
   endif
 endif
 
@@ -303,14 +295,24 @@ else
   daemon_loader_src = 'fu-main.c'
 endif
 
+fwupddaemon_rs = custom_target('fu-daemon-rs',
+  input: 'fu-daemon.rs',
+  output: ['fu-daemon-struct.c', 'fu-daemon-struct.h'],
+  command: [
+    python3,
+    join_paths(meson.project_source_root(), 'libfwupdplugin', 'rustgen.py'),
+    '@INPUT@', '@OUTPUT0@', '@OUTPUT1@',
+  ],
+)
 executable(
   'fwupd',
   fwupdengine_rs,
-  resources_src,
+  fwupddaemon_rs,
   plugins_hdr,
   sources: [
     daemon_loader_src,
     'fu-daemon.c',
+    'fu-dbus-daemon.c',
   ],
   include_directories: [
     root_incdir,
@@ -320,14 +322,11 @@ executable(
   dependencies: [
     valgrind,
     libsystemd,
-    daemon_dep,
+    engine_dep,
   ],
   link_with: [
     fwupdengine,
     plugin_libs,
-  ],
-  c_args: [
-    '-DFU_OFFLINE_DESTDIR=""',
   ],
   install: true,
   install_rpath: libdir_pkg,
@@ -338,20 +337,20 @@ endif
 
 if get_option('tests')
   env = environment()
+  env.set('G_DEBUG', 'fatal-criticals')
   env.set('G_TEST_SRCDIR', meson.current_source_dir())
   env.set('G_TEST_BUILDDIR', meson.current_build_dir())
   env.set('FWUPD_LOCALSTATEDIR', '/tmp/fwupd-self-test/var')
   e = executable(
     'fu-self-test',
     fwupdengine_rs,
-    resources_src,
     colorhug_test_firmware,
     hwid_test_firmware,
     multiple_rels_test_firmware,
     noreqs_test_firmware,
     plugins_hdr,
+    firmware_xml_gz_jcat,
     sources: [
-      'fu-spawn.c',
       'fu-self-test.c',
     ],
     include_directories: [
@@ -360,7 +359,7 @@ if get_option('tests')
       fwupdplugin_incdir,
     ],
     dependencies: [
-      daemon_dep,
+      engine_dep,
     ],
     link_with: [
       fwupdengine,

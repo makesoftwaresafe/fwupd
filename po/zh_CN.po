@@ -6,14 +6,16 @@
 # Boyuan Yang <073plan@gmail.com>, 2017,2020,2022
 # Dingzhong Chen <wsxy162@gmail.com>, 2020-2021
 # Dingzhong Chen <wsxy162@gmail.com>, 2016-2019
+# Bubu, 2024
 # Mingcong Bai <jeffbai@aosc.xyz>, 2017-2018
 # Mingye Wang <arthur200126@gmail.com>, 2016
 # Mingye Wang <arthur2e5@aosc.xyz>, 2015
+# Richard Hughes <richard@hughsie.com>, 2023
 msgid ""
 msgstr ""
 "Project-Id-Version: fwupd\n"
 "Report-Msgid-Bugs-To: \n"
-"Language-Team: Chinese (China) (http://www.transifex.com/freedesktop/fwupd/language/zh_CN/)\n"
+"Language-Team: Chinese (China) (http://app.transifex.com/freedesktop/fwupd/language/zh_CN/)\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -193,12 +195,6 @@ msgid "%u hour"
 msgid_plural "%u hours"
 msgstr[0] "%u 小时"
 
-#. TRANSLATORS: how many local devices can expect updates now
-#, c-format
-msgid "%u local device supported"
-msgid_plural "%u local devices supported"
-msgstr[0] "%u 个本地设备受支持"
-
 #. TRANSLATORS: duration in minutes
 #, c-format
 msgid "%u minute"
@@ -282,10 +278,6 @@ msgid "Answer yes to all questions"
 msgstr "一律用“是”回答问题"
 
 #. TRANSLATORS: command line option
-msgid "Apply firmware updates"
-msgstr "应用固件更新"
-
-#. TRANSLATORS: command line option
 msgid "Apply update even when not advised"
 msgstr "应用更新，即使不建议"
 
@@ -302,10 +294,6 @@ msgstr "正在应用更新……"
 msgid "Approved firmware:"
 msgid_plural "Approved firmware:"
 msgstr[0] "批准的固件："
-
-#. TRANSLATORS: stop nagging the user
-msgid "Ask again next time?"
-msgstr "下次再次询问？"
 
 #. TRANSLATORS: command description
 msgid "Attach to firmware mode"
@@ -371,12 +359,17 @@ msgstr "自动报告"
 msgid "Automatically upload every time?"
 msgstr "每次都自动上传？"
 
+#. TRANSLATORS: Title: Whether BIOS Firmware updates is enabled
+msgid "BIOS firmware updates"
+msgstr "BIOS 固件更新"
+
+#. TRANSLATORS: description of a BIOS setting
+msgid "BIOS updates delivered via LVFS or Windows Update"
+msgstr "BIOS 更新通过 LVFS 或 Windows Update 提供。"
+
 #. TRANSLATORS: command argument: uppercase, spaces->dashes
 msgid "BUILDER-XML FILENAME-DST"
 msgstr "生成器XML 目标文件名"
-
-msgid "BYTES"
-msgstr "字节"
 
 #. TRANSLATORS: command description
 msgid "Bind new kernel driver"
@@ -398,7 +391,7 @@ msgstr "阻止指定的固件被安装"
 msgid "Bootloader Version"
 msgstr "引导程序版本"
 
-#. TRANSLATORS: the stream of firmware, e.g. nonfree or open-source
+#. TRANSLATORS: the stream of firmware, e.g. nonfree
 msgid "Branch"
 msgstr "分支"
 
@@ -431,6 +424,7 @@ msgstr "已变更"
 msgid "Checks cryptographic hash matches firmware"
 msgstr "检查加密哈希与固件是否匹配"
 
+#. TRANSLATORS: hash to that exact firmware archive
 #. TRANSLATORS: remote checksum
 msgid "Checksum"
 msgstr "校验和"
@@ -442,6 +436,10 @@ msgstr "清除从最后一次更新获取的结果"
 #. TRANSLATORS: error message
 msgid "Command not found"
 msgstr "未找到命令"
+
+#. TRANSLATORS: title prefix for the BIOS settings dialog
+msgid "Configuration Change Suggested"
+msgstr "配置变更建议"
 
 #. TRANSLATORS: command description
 msgid "Convert a firmware file"
@@ -466,10 +464,6 @@ msgstr "当前版本"
 #. TRANSLATORS: command argument: uppercase, spaces->dashes
 msgid "DEVICE-ID|GUID"
 msgstr "设备ID|GUID"
-
-#. TRANSLATORS: DFU stands for device firmware update
-msgid "DFU Utility"
-msgstr "固件更新实用程序"
 
 #. TRANSLATORS: for the --verbose arg
 msgid "Debugging Options"
@@ -546,10 +540,6 @@ msgstr "设备阶段更新"
 msgid "Device supports switching to a different branch of firmware"
 msgstr "设备支持切换到不同的固件分支"
 
-#. TRANSLATORS: command line option
-msgid "Device update method"
-msgstr "设备更新方法"
-
 #. TRANSLATORS: Device update needs to be separately activated
 msgid "Device update needs activation"
 msgstr "设备更新需要激活"
@@ -582,29 +572,22 @@ msgid "Devices with no available firmware updates: "
 msgstr "无固件更新可用的设备："
 
 #. TRANSLATORS: message letting the user know no device upgrade available
-#. TRANSLATORS: message letting the user know no device upgrade
-#. * available
+#. TRANSLATORS: message letting the user know no device
+#. * upgrade available
 #. TRANSLATORS: message letting the user know no device upgrade available
-#. TRANSLATORS: message letting the user know no device upgrade
-#. * available
+#. TRANSLATORS: message letting the user know no device
+#. * upgrade available
 msgid "Devices with the latest available firmware version:"
 msgstr "固件已是最新的设备："
 
-#. TRANSLATORS: Suffix: the HSI result
 #. TRANSLATORS: Plugin is inactive and not used
+#. TRANSLATORS: Suffix: the HSI result
 msgid "Disabled"
 msgstr "已禁用"
-
-msgid "Disabled fwupdate debugging"
-msgstr "禁用 fwupdate 调试"
 
 #. TRANSLATORS: command description
 msgid "Disables a given remote"
 msgstr "禁用给定的远程源"
-
-#. TRANSLATORS: command line option
-msgid "Display version"
-msgstr "显示版本"
 
 #. TRANSLATORS: command line option
 msgid "Do not check for old metadata"
@@ -655,7 +638,6 @@ msgid "Do you want to upload reports automatically for future updates?"
 msgstr "你要将来的更新中自动上传报告吗？"
 
 #. TRANSLATORS: success
-#. success
 msgid "Done!"
 msgstr "完成！"
 
@@ -668,13 +650,6 @@ msgstr "降级 %s，从 %s 到 %s？"
 #. TRANSLATORS: command description
 msgid "Downgrades the firmware on a device"
 msgstr "降级设备上的固件"
-
-#. TRANSLATORS: the first replacement is a display name
-#. * e.g. "ColorHugALS" and the second and third are
-#. * version numbers e.g. "1.2.3"
-#, c-format
-msgid "Downgrading %s from %s to %s... "
-msgstr "正在降级 %s，从 %s 到 %s…"
 
 #. TRANSLATORS: %1 is a device name
 #, c-format
@@ -697,13 +672,8 @@ msgstr "从文件转储 SMBIOS 数据"
 msgid "Duration"
 msgstr "时长"
 
-#. TRANSLATORS: ESP is EFI System Partition
-msgid "ESP specified was not valid"
-msgstr "指定的 ESP 无效"
-
-#. TRANSLATORS: command line option
-msgid "Enable firmware update support on supported systems"
-msgstr "在所支持的系统上启用固件更新的支持"
+msgid "Enable"
+msgstr "启用"
 
 #. TRANSLATORS: a remote here is like a 'repo' or software source
 msgid "Enable new remote?"
@@ -713,14 +683,10 @@ msgstr "£启用新的远程库"
 msgid "Enable this remote?"
 msgstr "要启用此远程源吗？"
 
-#. TRANSLATORS: Suffix: the HSI result
-#. TRANSLATORS: Plugin is active and in use
 #. TRANSLATORS: if the remote is enabled
+#. TRANSLATORS: Suffix: the HSI result
 msgid "Enabled"
 msgstr "已启用"
-
-msgid "Enabled fwupdate debugging"
-msgstr "启用 fwupdate 调试"
 
 #. TRANSLATORS: command description
 msgid "Enables a given remote"
@@ -743,7 +709,7 @@ msgstr "加密内存"
 
 #. TRANSLATORS: command description
 msgid "Erase all firmware update history"
-msgstr "清楚所有固件更新历史"
+msgstr "清除所有固件更新历史"
 
 #. TRANSLATORS: erasing contents of the flash chips
 msgid "Erasing…"
@@ -782,14 +748,6 @@ msgid "FILENAME CERTIFICATE PRIVATE-KEY"
 msgstr "文件名称 证书 私钥"
 
 #. TRANSLATORS: command argument: uppercase, spaces->dashes
-msgid "FILENAME DEVICE-ALT-NAME|DEVICE-ALT-ID"
-msgstr "文件名 设备替代名称|设备替代ID"
-
-#. TRANSLATORS: command argument: uppercase, spaces->dashes
-msgid "FILENAME DEVICE-ALT-NAME|DEVICE-ALT-ID [IMAGE-ALT-NAME|IMAGE-ALT-ID]"
-msgstr "文件名 设备替代名称|设备替代ID [映像替代名称|映像替代ID]"
-
-#. TRANSLATORS: command argument: uppercase, spaces->dashes
 msgid "FILENAME DEVICE-ID"
 msgstr "文件名 设备ID"
 
@@ -805,7 +763,6 @@ msgstr "文件名 [固件类型]"
 msgid "FILENAME-SRC FILENAME-DST [FIRMWARE-TYPE-SRC] [FIRMWARE-TYPE-DST]"
 msgstr "源文件名 目标文件名 [源固件类型] [目标固件类型]"
 
-#. TRANSLATORS: Suffix: the fallback HSI result
 #. TRANSLATORS: the update state of the specific device
 msgid "Failed"
 msgstr "已失败"
@@ -814,27 +771,14 @@ msgstr "已失败"
 msgid "Failed to apply update"
 msgstr "应用更新失败"
 
-#. TRANSLATORS: we could not talk to the fwupd daemon
 #. TRANSLATORS: could not contact the fwupd service over D-Bus
 msgid "Failed to connect to daemon"
 msgstr "连接到守护进程失败"
-
-#. TRANSLATORS: we could not get the devices to update offline
-msgid "Failed to get pending devices"
-msgstr "获取待处理的设备失败"
-
-#. TRANSLATORS: we could not install for some reason
-msgid "Failed to install firmware update"
-msgstr "安装固件更新失败"
 
 #. TRANSLATORS: could not read existing system data
 #. TRANSLATORS: could not read file
 msgid "Failed to load local dbx"
 msgstr "加载本地 dbx 失败"
-
-#. TRANSLATORS: quirks are device-specific workarounds
-msgid "Failed to load quirks"
-msgstr "载入特定问题失败"
 
 #. TRANSLATORS: could not read existing system data
 msgid "Failed to load system dbx"
@@ -852,21 +796,9 @@ msgstr "未能解析参数"
 msgid "Failed to parse file"
 msgstr "解析文件失败"
 
-#. TRANSLATORS: the user didn't read the man page
-msgid "Failed to parse flags for --filter"
-msgstr "无法解析 --filter 的标志"
-
 #. TRANSLATORS: could not parse file
 msgid "Failed to parse local dbx"
 msgstr "解析本地 dbx 失败"
-
-#. TRANSLATORS: we could not reboot for some reason
-msgid "Failed to reboot"
-msgstr "重启失败"
-
-#. TRANSLATORS: we could not talk to plymouth
-msgid "Failed to set splash mode"
-msgstr "设定启动屏幕模式失败"
 
 #. TRANSLATORS: something with a blocked hash exists
 #. * in the users ESP -- which would be bad!
@@ -909,6 +841,14 @@ msgstr "固件更新守护程序"
 msgid "Firmware Utility"
 msgstr "固件实用程序"
 
+#. TRANSLATORS: Title: firmware refers to the flash chip in the computer
+msgid "Firmware Write Protection"
+msgstr "固件写保护"
+
+#. TRANSLATORS: Title: firmware refers to the flash chip in the computer
+msgid "Firmware Write Protection Lock"
+msgstr "固件写保护锁"
+
 #. TRANSLATORS: Title: if we can verify the firmware checksums
 msgid "Firmware attestation"
 msgstr "固件证明"
@@ -927,26 +867,9 @@ msgid "Firmware metadata has not been updated for %u day and may not be up to da
 msgid_plural "Firmware metadata has not been updated for %u days and may not be up to date."
 msgstr[0] "固件元数据已有 %u 天未更新，数据可能不是最新的。"
 
-#. TRANSLATORS: error message for a user who ran fwupdmgr
-#. refresh recently %1 is an already translated timestamp such
-#. as 6 hours or 15 seconds
-#, c-format
-msgid "Firmware metadata last refresh: %s ago. Use --force to refresh again."
-msgstr "固件元数据上次刷新：%s前。使用 --force 再次刷新。"
-
 #. TRANSLATORS: Title: if firmware updates are available
 msgid "Firmware updates"
 msgstr "固件更新"
-
-msgid "Firmware updates are not supported on this machine."
-msgstr "此机器不支持固件更新。"
-
-msgid "Firmware updates are supported on this machine."
-msgstr "此机器支持固件更新。"
-
-#. TRANSLATORS: user needs to run a command
-msgid "Firmware updates disabled; run 'fwupdmgr unlock' to enable"
-msgstr "固件更新已禁用；运行“fwupdmgr unlock”以启用"
 
 #. TRANSLATORS: description of plugin state, e.g. disabled
 msgid "Flags"
@@ -955,9 +878,6 @@ msgstr "标志"
 #. TRANSLATORS: command line option
 msgid "Force the action by relaxing some runtime checks"
 msgstr "通过放宽一些运行时检查来强制操作"
-
-msgid "Force the action ignoring all warnings"
-msgstr "强制操作忽略所有警告"
 
 #. TRANSLATORS: Suffix: the HSI result
 msgid "Found"
@@ -973,7 +893,7 @@ msgid_plural "GUIDs"
 msgstr[0] "GUID"
 
 #. TRANSLATORS: command argument: uppercase, spaces->dashes
-msgctxt "A single GUID"
+msgctxt "command-argument"
 msgid "GUID"
 msgstr "GUID"
 
@@ -1066,10 +986,6 @@ msgstr "忽略固件校验和错误"
 msgid "Ignore firmware hardware mismatch failures"
 msgstr "忽略固件硬件不匹配错误"
 
-#. TRANSLATORS: Ignore validation safety checks when flashing this device
-msgid "Ignore validation safety checks"
-msgstr "忽略验证安全检查"
-
 #. TRANSLATORS: try to help
 msgid "Ignoring SSL strict checks, to do this automatically in the future export DISABLE_SSL_STRICT in your environment"
 msgstr "正在忽略 SSL 严格检查，要在之后自动应用这一选项请在你的环境里 export DISABLE_SSL_STRICT"
@@ -1079,12 +995,8 @@ msgid "Install Duration"
 msgstr "安装时长"
 
 #. TRANSLATORS: command description
-msgid "Install a firmware blob on a device"
-msgstr "在设备上安装固件比特块"
-
-#. TRANSLATORS: command description
-msgid "Install a firmware file on this hardware"
-msgstr "在此硬件上安装固件文件"
+msgid "Install a specific firmware file on all devices that match"
+msgstr "在所有匹配的设备上安装特定的固件文件"
 
 msgid "Install old version of signed system firmware"
 msgstr "安装旧版本的已签名系统固件"
@@ -1098,19 +1010,11 @@ msgstr "安装已签名的设备固件"
 msgid "Install signed system firmware"
 msgstr "安装已签名的系统固件"
 
-#. TRANSLATORS: Install composite firmware on the parent before the child
-msgid "Install to parent device first"
-msgstr "首先安装到上级设备"
-
 msgid "Install unsigned device firmware"
 msgstr "安装未签名的设备固件"
 
 msgid "Install unsigned system firmware"
 msgstr "安装未签名的系统固件"
-
-#. TRANSLATORS: console message when no Plymouth is installed
-msgid "Installing Firmware…"
-msgstr "正在安装固件……"
 
 #. TRANSLATORS: this is shown when updating the firmware after the reboot
 msgid "Installing firmware update…"
@@ -1145,20 +1049,6 @@ msgstr "Intel BootGuard 错误策略"
 msgid "Intel BootGuard verified boot"
 msgstr "Intel BootGuard 验任启动"
 
-#. TRANSLATORS: Title: CET = Control-flow Enforcement Technology,
-#. * active means being used by the OS
-msgid "Intel CET Active"
-msgstr "Intel CET 激活"
-
-#. TRANSLATORS: Title: CET = Control-flow Enforcement Technology,
-#. * enabled means supported by the processor
-msgid "Intel CET Enabled"
-msgstr "Intel CET 支持"
-
-#. TRANSLATORS: Title: SMAP = Supervisor Mode Access Prevention
-msgid "Intel SMAP"
-msgstr "Intel SMAP"
-
 #. TRANSLATORS: Device cannot be removed easily
 msgid "Internal device"
 msgstr "内部设备"
@@ -1175,14 +1065,6 @@ msgstr "处于引导程序模式"
 msgid "Issue"
 msgid_plural "Issues"
 msgstr[0] "问题"
-
-#. TRANSLATORS: command argument: uppercase, spaces->dashes
-msgid "KEY,VALUE"
-msgstr "键,值"
-
-#. TRANSLATORS: keyring type, e.g. GPG or PKCS7
-msgid "Keyring"
-msgstr "密钥环"
 
 #. TRANSLATORS: command argument: uppercase, spaces->dashes
 msgid "LOCATION"
@@ -1221,10 +1103,6 @@ msgstr "Linux 交换区"
 #. TRANSLATORS: command line option
 msgid "List entries in dbx"
 msgstr "列出 dbx 中的条目"
-
-#. TRANSLATORS: command line option
-msgid "List supported firmware updates"
-msgstr "列出所支持固件的更新"
 
 #. TRANSLATORS: command description
 msgid "List the available firmware types"
@@ -1284,12 +1162,7 @@ msgstr "可从 Linux 供应商固件服务获取元数据。"
 msgid "Minimum Version"
 msgstr "最小版本"
 
-#. TRANSLATORS: error message
-#, c-format
-msgid "Mismatched daemon and client, use %s instead"
-msgstr "守护进程与客户端不匹配，使用 %s 来代替"
-
-#. TRANSLATORS: sets something in daemon.conf
+#. TRANSLATORS: sets something in the daemon configuration file
 msgid "Modifies a daemon configuration value"
 msgstr "修改守护进程的配置值"
 
@@ -1345,10 +1218,6 @@ msgstr "未找到固件 ID"
 msgid "No hardware detected with firmware update capability"
 msgstr "没有检测到支持更新固件的硬件"
 
-#. TRANSLATORS: nothing found
-msgid "No plugins found"
-msgstr "未找到插件"
-
 #. TRANSLATORS: no repositories to download from
 msgid "No releases available"
 msgstr "无可用发布版本"
@@ -1363,10 +1232,6 @@ msgstr "无可用远程源"
 
 msgid "No updates available for remaining devices"
 msgstr "其余设备没有可用更新"
-
-#. TRANSLATORS: nothing was updated offline
-msgid "No updates were applied"
-msgstr "没有应用任何更新"
 
 #. TRANSLATORS: Suffix: the HSI result
 msgid "Not found"
@@ -1383,10 +1248,6 @@ msgstr "确定"
 #. TRANSLATORS: command line option
 msgid "Only show single PCR value"
 msgstr "只显示单 PCR 值"
-
-#. TRANSLATORS: command line option
-msgid "Only use IPFS when downloading files"
-msgstr "下载文件时只使用 IPFS"
 
 #. TRANSLATORS: some devices can only be updated to a new semver and cannot
 #. * be downgraded or reinstalled with the existing version
@@ -1432,10 +1293,6 @@ msgstr "载荷"
 msgid "Pending"
 msgstr "待处理"
 
-#. TRANSLATORS: console message when not using plymouth
-msgid "Percentage complete"
-msgstr "完成百分比"
-
 #. TRANSLATORS: prompt to apply the update
 msgid "Perform operation?"
 msgstr "执行操作？"
@@ -1457,12 +1314,6 @@ msgstr "预启动 DMA 保护"
 msgid "Previous version"
 msgstr "上个版本"
 
-msgid "Print the version number"
-msgstr "打印版本号"
-
-msgid "Print verbose debug statements"
-msgstr "打印详细调试语句"
-
 #. TRANSLATORS: the numeric priority
 msgid "Priority"
 msgstr "优先级"
@@ -1473,10 +1324,6 @@ msgstr "确定要上传吗？"
 #. TRANSLATORS: a non-free software license
 msgid "Proprietary"
 msgstr "私有"
-
-#. TRANSLATORS: command line option
-msgid "Query for firmware update support"
-msgstr "查询固件更新的支持"
 
 #. TRANSLATORS: command argument: uppercase, spaces->dashes
 msgid "REMOTE-ID"
@@ -1490,14 +1337,6 @@ msgstr "远程ID 键 值"
 msgid "Read a firmware blob from a device"
 msgstr "从设备读取固件比特块（blob）"
 
-#. TRANSLATORS: command description
-msgid "Read firmware from device into a file"
-msgstr "将来自设备的固件读入文件"
-
-#. TRANSLATORS: command description
-msgid "Read firmware from one partition into a file"
-msgstr "将来自分区的固件读入文件"
-
 #. TRANSLATORS: %1 is a device name
 #, c-format
 msgid "Reading from %s…"
@@ -1506,10 +1345,6 @@ msgstr "正在读取 %s……"
 #. TRANSLATORS: reading from the flash chips
 msgid "Reading…"
 msgstr "正在读取…"
-
-#. TRANSLATORS: console message when not using plymouth
-msgid "Rebooting…"
-msgstr "正在重启……"
 
 #. TRANSLATORS: command description
 msgid "Refresh metadata from remote server"
@@ -1529,14 +1364,7 @@ msgstr "在设备上重新安装当前的固件"
 msgid "Reinstall firmware on a device"
 msgstr "重新安装设备上的固件"
 
-#. TRANSLATORS: the first replacement is a display name
-#. * e.g. "ColorHugALS" and the second is a version number
-#. * e.g. "1.2.3"
-#, c-format
-msgid "Reinstalling %s with %s... "
-msgstr "正在重新安装 %s，使用 %s…"
-
-#. TRANSLATORS: the stream of firmware, e.g. nonfree or open-source
+#. TRANSLATORS: the stream of firmware, e.g. nonfree
 msgid "Release Branch"
 msgstr "发行分支"
 
@@ -1544,10 +1372,6 @@ msgstr "发行分支"
 #. TRANSLATORS: remote identifier, e.g. lvfs-testing
 msgid "Remote ID"
 msgstr "远程源 ID"
-
-#. TRANSLATORS: command description
-msgid "Replace data in an existing firmware file"
-msgstr "用已有的固件文件替换数据"
 
 #. TRANSLATORS: URI to send success/failure reports
 msgid "Report URI"
@@ -1589,14 +1413,6 @@ msgstr "正在重启设备…"
 msgid "Return all the hardware IDs for the machine"
 msgstr "返回机器的所有硬件 ID"
 
-#. TRANSLATORS: this is shown in the MOTD
-msgid "Run `fwupdmgr get-upgrades` for more information."
-msgstr "运行 \"fwupdmgr get-upgrades\" 获取更多信息。"
-
-#. TRANSLATORS: this is shown in the MOTD
-msgid "Run `fwupdmgr sync-bkc` to complete this action."
-msgstr "运行 `fwupdmgr sync-bkc` 以完成此操作。"
-
 #. TRANSLATORS: command line option
 msgid "Run the plugin composite cleanup routine when using install-blob"
 msgstr "当使用安装比特块时运行插件组合清理例程"
@@ -1637,10 +1453,6 @@ msgstr "子系统 驱动 [设备ID|GUID]"
 msgid "Save a file that allows generation of hardware IDs"
 msgstr "保存允许生成硬件 ID 的文件"
 
-#. TRANSLATORS: command line option
-msgid "Schedule installation for next reboot when possible"
-msgstr "如有可能，安排安装到下次重启"
-
 #. TRANSLATORS: scheduling an update to be done on the next boot
 msgid "Scheduling…"
 msgstr "正在计划…"
@@ -1670,13 +1482,13 @@ msgstr "所选卷"
 msgid "Serial Number"
 msgstr "序列号"
 
-#. TRANSLATORS: command line option
-msgid "Set the debugging flag during update"
-msgstr "更新期间设定调试标志"
-
 #. TRANSLATORS: firmware approved by the admin
 msgid "Sets the list of approved firmware"
 msgstr "设定批准固件的列表"
+
+#. TRANSLATORS: description of a BIOS setting
+msgid "Settings will apply after system reboots"
+msgstr "设置将在系统重启后生效"
 
 #. TRANSLATORS: command description
 msgid "Share firmware history with the developers"
@@ -1718,14 +1530,6 @@ msgstr "显示固件更新历史"
 msgid "Show the calculated version of the dbx"
 msgstr "显示 dbx 的计算版本"
 
-#. TRANSLATORS: command line option
-msgid "Show the debug log from the last attempted update"
-msgstr "显示上次尝试更新的调试日志"
-
-#. TRANSLATORS: command line option
-msgid "Show the information of firmware update status"
-msgstr "显示固件更新状态的信息"
-
 #. TRANSLATORS: shutdown to apply the update
 msgid "Shutdown now?"
 msgstr "现在关机？"
@@ -1757,15 +1561,9 @@ msgstr "大小"
 msgid "Source"
 msgstr "来源"
 
-msgid "Specify Vendor/Product ID(s) of DFU device"
-msgstr "指定 DFU 设备的供应商/产品 ID"
-
 #. TRANSLATORS: command line option
 msgid "Specify the dbx database file"
 msgstr "指定 dbx 数据库文件"
-
-msgid "Specify the number of bytes per USB transfer"
-msgstr "指定每次 USB 传输的字节数"
 
 #. TRANSLATORS: the update state of the specific device
 msgid "Success"
@@ -1854,6 +1652,10 @@ msgstr "切换分支，从 %s 到 %s？"
 msgid "Switch the firmware branch on the device"
 msgstr "切换设备的固件分支"
 
+#. TRANSLATORS: command description
+msgid "Sync firmware versions to the chosen configuration"
+msgstr "同步固件版本至选定的配置"
+
 #. TRANSLATORS: Must be plugged into an outlet
 msgid "System requires external power source"
 msgstr "系统需要外接电源"
@@ -1879,6 +1681,7 @@ msgstr[0] "标签"
 msgid "Tainted"
 msgstr "受污染"
 
+#. show the user the entire data blob
 msgid "Target"
 msgstr "目标"
 
@@ -1897,12 +1700,6 @@ msgstr "TPM PCR0 跟重建的不同。"
 #. TRANSLATORS: the user is SOL for support...
 msgid "The daemon has loaded 3rd party code and is no longer supported by the upstream developers!"
 msgstr "守护进程已经加载了第三方代码，并且上游开发者不再支持。"
-
-#. TRANSLATORS: this is for the device tests, %1 is the device
-#. * version, %2 is what we expected
-#, c-format
-msgid "The device version did not match: got %s, expected %s"
-msgstr "设备版本不匹配：得到 %s，期望 %s"
 
 #. TRANSLATORS: %1 is the firmware vendor, %2 is the device vendor name
 #, c-format
@@ -1946,20 +1743,12 @@ msgid "This tool allows an administrator to apply UEFI dbx updates."
 msgstr "此工具允许管理员应用 UEFI dbx 更新。"
 
 #. TRANSLATORS: CLI description
-msgid "This tool allows an administrator to debug UpdateCapsule operation."
-msgstr "此工具允许管理员调试 UpdateCapsule 操作。"
-
-#. TRANSLATORS: CLI description
 msgid "This tool allows an administrator to query and control the fwupd daemon, allowing them to perform actions such as installing or downgrading firmware."
 msgstr "此工具允许管理员查询和控制 fwupd 守护进程，让其执行如安装或者降级固件等操作。"
 
 #. TRANSLATORS: CLI description
 msgid "This tool allows an administrator to use the fwupd plugins without being installed on the host system."
 msgstr "此工具可以让管理员不用安装 fwupd 插件到主机系统上就可以使用它们。"
-
-#. TRANSLATORS: the user needs to stop playing with stuff
-msgid "This tool can only be used by the root user"
-msgstr "此工具只能由 root 用户使用"
 
 #. TRANSLATORS: CLI description
 msgid "This tool will read and parse the TPM event log from the system firmware."
@@ -1976,10 +1765,6 @@ msgstr "类型"
 #. TRANSLATORS: partition refers to something on disk, again, hey Arch users
 msgid "UEFI ESP partition not detected or configured"
 msgstr "UEFI ESP 分区未检测到或未配置"
-
-#. TRANSLATORS: program name
-msgid "UEFI Firmware Utility"
-msgstr "固件 UEFI 实用工具"
 
 #. TRANSLATORS: capsule updates are an optional BIOS feature
 msgid "UEFI capsule updates not available or enabled in firmware setup"
@@ -2024,6 +1809,7 @@ msgstr "未加密"
 #. TRANSLATORS: current daemon status is unknown
 #. TRANSLATORS: we don't know the license of the update
 #. TRANSLATORS: unknown release urgency
+#. TRANSLATORS: Suffix: the fallback HSI result
 msgid "Unknown"
 msgstr "未知"
 
@@ -2046,10 +1832,6 @@ msgstr "为固件访问解锁设备"
 msgid "Unmounts the ESP"
 msgstr "卸载 ESP 分区"
 
-#. TRANSLATORS: command line option
-msgid "Unset the debugging flag during update"
-msgstr "更新期间取消设定调试标志"
-
 #. TRANSLATORS: error message
 #, c-format
 msgid "Unsupported daemon version %s, client version is %s"
@@ -2067,7 +1849,6 @@ msgstr "可更新"
 msgid "Update Error"
 msgstr "更新错误"
 
-#. TRANSLATORS: helpful messages from last update
 #. TRANSLATORS: helpful messages for the update
 msgid "Update Message"
 msgstr "更新消息"
@@ -2084,10 +1865,6 @@ msgstr "更新失败为已知问题，请访问此 URL 以获取详情："
 msgid "Update now?"
 msgstr "现在更新吗？"
 
-#. TRANSLATORS: Update can only be done from offline mode
-msgid "Update requires a reboot"
-msgstr "更新需要重启"
-
 #. TRANSLATORS: command description
 msgid "Update the stored cryptographic hash with current ROM contents"
 msgstr "以当前 ROM 内容更新存储的加密哈希"
@@ -2102,13 +1879,6 @@ msgstr "使用当前内容更新存储的元数据"
 msgid "Updating"
 msgstr "正在更新"
 
-#. TRANSLATORS: the first replacement is a display name
-#. * e.g. "ColorHugALS" and the second and third are
-#. * version numbers e.g. "1.2.3"
-#, c-format
-msgid "Updating %s from %s to %s... "
-msgstr "正在更新 %s，从 %s 到 %s…"
-
 #. TRANSLATORS: %1 is a device name
 #, c-format
 msgid "Updating %s…"
@@ -2120,10 +1890,6 @@ msgstr "正在更新 %s……"
 msgid "Upgrade %s from %s to %s?"
 msgstr "升级 %s，从 %s 到 %s？"
 
-#. TRANSLATORS: ask the user to upload
-msgid "Upload report now?"
-msgstr "要上传报告吗？"
-
 #. TRANSLATORS: explain why we want to upload
 msgid "Uploading firmware reports helps hardware vendors to quickly identify failing and successful updates on real devices."
 msgstr "上传固件报告可帮助硬件供应商尽快确定真实设备上更新的成功及失败案例。"
@@ -2131,14 +1897,6 @@ msgstr "上传固件报告可帮助硬件供应商尽快确定真实设备上更
 #. TRANSLATORS: how important the release is
 msgid "Urgency"
 msgstr "紧急性"
-
-#. TRANSLATORS: explain how to get help
-msgid "Use fwupdtool --help for help"
-msgstr "使用 fwupdtool --help 获取帮助信息"
-
-#. TRANSLATORS: command line option
-msgid "Use quirk flags when installing firmware"
-msgstr "安装固件时使用 quirk 标志"
 
 #. TRANSLATORS: User has been notified
 msgid "User has been notified"
@@ -2148,9 +1906,6 @@ msgstr "已通知用户"
 msgid "Username"
 msgstr "用户名"
 
-msgid "VID:PID"
-msgstr "VID:PID"
-
 #. TRANSLATORS: Suffix: the HSI result
 msgid "Valid"
 msgstr "有效"
@@ -2159,7 +1914,7 @@ msgstr "有效"
 msgid "Validating ESP contents…"
 msgstr "正在验证 ESP 内容……"
 
-#. TRANSLATORS: one line variant of release (e.g. 'Prerelease' or 'China')
+#. TRANSLATORS: one line variant of release (e.g. 'China')
 msgid "Variant"
 msgstr "变型"
 
@@ -2182,14 +1937,6 @@ msgstr "等待中..."
 #. TRANSLATORS: command description
 msgid "Watch for hardware changes"
 msgstr "监视硬件更改"
-
-#. TRANSLATORS: command description
-msgid "Write firmware from file into device"
-msgstr "将来自文件的固件写入设备"
-
-#. TRANSLATORS: command description
-msgid "Write firmware from file into one partition"
-msgstr "将来自文件的固件写入分区"
 
 #. TRANSLATORS: decompressing images from a container firmware
 msgid "Writing file:"

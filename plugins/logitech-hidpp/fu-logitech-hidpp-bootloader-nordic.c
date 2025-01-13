@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2016 Richard Hughes <richard@hughsie.com>
+ * Copyright 2016 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #include "config.h"
@@ -10,22 +10,23 @@
 
 #include "fu-logitech-hidpp-bootloader-nordic.h"
 #include "fu-logitech-hidpp-common.h"
+#include "fu-logitech-hidpp-struct.h"
 
-struct _FuLogitechHidPpBootloaderNordic {
-	FuLogitechHidPpBootloader parent_instance;
+struct _FuLogitechHidppBootloaderNordic {
+	FuLogitechHidppBootloader parent_instance;
 };
 
-G_DEFINE_TYPE(FuLogitechHidPpBootloaderNordic,
+G_DEFINE_TYPE(FuLogitechHidppBootloaderNordic,
 	      fu_logitech_hidpp_bootloader_nordic,
-	      FU_TYPE_UNIFYING_BOOTLOADER)
+	      FU_TYPE_LOGITECH_HIDPP_BOOTLOADER)
 
 static gchar *
-fu_logitech_hidpp_bootloader_nordic_get_hw_platform_id(FuLogitechHidPpBootloader *self,
+fu_logitech_hidpp_bootloader_nordic_get_hw_platform_id(FuLogitechHidppBootloader *self,
 						       GError **error)
 {
-	g_autoptr(FuLogitechHidPpBootloaderRequest) req =
+	g_autoptr(FuLogitechHidppBootloaderRequest) req =
 	    fu_logitech_hidpp_bootloader_request_new();
-	req->cmd = FU_UNIFYING_BOOTLOADER_CMD_GET_HW_PLATFORM_ID;
+	req->cmd = FU_LOGITECH_HIDPP_BOOTLOADER_CMD_GET_HW_PLATFORM_ID;
 	if (!fu_logitech_hidpp_bootloader_request(self, req, error)) {
 		g_prefix_error(error, "failed to get HW ID: ");
 		return NULL;
@@ -34,13 +35,13 @@ fu_logitech_hidpp_bootloader_nordic_get_hw_platform_id(FuLogitechHidPpBootloader
 }
 
 static gchar *
-fu_logitech_hidpp_bootloader_nordic_get_fw_version(FuLogitechHidPpBootloader *self, GError **error)
+fu_logitech_hidpp_bootloader_nordic_get_fw_version(FuLogitechHidppBootloader *self, GError **error)
 {
 	guint16 micro;
 
-	g_autoptr(FuLogitechHidPpBootloaderRequest) req =
+	g_autoptr(FuLogitechHidppBootloaderRequest) req =
 	    fu_logitech_hidpp_bootloader_request_new();
-	req->cmd = FU_UNIFYING_BOOTLOADER_CMD_GET_FW_VERSION;
+	req->cmd = FU_LOGITECH_HIDPP_BOOTLOADER_CMD_GET_FW_VERSION;
 	if (!fu_logitech_hidpp_bootloader_request(self, req, error)) {
 		g_prefix_error(error, "failed to get firmware version: ");
 		return NULL;
@@ -60,12 +61,12 @@ fu_logitech_hidpp_bootloader_nordic_get_fw_version(FuLogitechHidPpBootloader *se
 static gboolean
 fu_logitech_hidpp_bootloader_nordic_setup(FuDevice *device, GError **error)
 {
-	FuLogitechHidPpBootloader *self = FU_UNIFYING_BOOTLOADER(device);
+	FuLogitechHidppBootloader *self = FU_LOGITECH_HIDPP_BOOTLOADER(device);
 	g_autofree gchar *hw_platform_id = NULL;
 	g_autofree gchar *version_fw = NULL;
 	g_autoptr(GError) error_local = NULL;
 
-	/* FuLogitechHidPpBootloader->setup */
+	/* FuLogitechHidppBootloader->setup */
 	if (!FU_DEVICE_CLASS(fu_logitech_hidpp_bootloader_nordic_parent_class)
 		 ->setup(device, error))
 		return FALSE;
@@ -89,26 +90,26 @@ fu_logitech_hidpp_bootloader_nordic_setup(FuDevice *device, GError **error)
 }
 
 static gboolean
-fu_logitech_hidpp_bootloader_nordic_write_signature(FuLogitechHidPpBootloader *self,
+fu_logitech_hidpp_bootloader_nordic_write_signature(FuLogitechHidppBootloader *self,
 						    guint16 addr,
 						    guint8 len,
 						    const guint8 *data,
 						    GError **error)
 {
-	g_autoptr(FuLogitechHidPpBootloaderRequest) req =
+	g_autoptr(FuLogitechHidppBootloaderRequest) req =
 	    fu_logitech_hidpp_bootloader_request_new();
 	req->cmd = 0xC0;
 	req->addr = addr;
 	req->len = len;
-	memcpy(req->data, data, req->len);
+	memcpy(req->data, data, req->len); /* nocheck:blocked */
 	if (!fu_logitech_hidpp_bootloader_request(self, req, error)) {
 		g_prefix_error(error, "failed to write sig @0x%02x: ", addr);
 		return FALSE;
 	}
-	if (req->cmd == FU_UNIFYING_BOOTLOADER_CMD_WRITE_RAM_BUFFER_INVALID_ADDR) {
+	if (req->cmd == FU_LOGITECH_HIDPP_BOOTLOADER_CMD_WRITE_RAM_BUFFER_INVALID_ADDR) {
 		g_set_error(error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_FAILED,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_WRITE,
 			    "failed to write @%04x: signature is too big",
 			    addr);
 		return FALSE;
@@ -117,63 +118,63 @@ fu_logitech_hidpp_bootloader_nordic_write_signature(FuLogitechHidPpBootloader *s
 }
 
 static gboolean
-fu_logitech_hidpp_bootloader_nordic_write(FuLogitechHidPpBootloader *self,
+fu_logitech_hidpp_bootloader_nordic_write(FuLogitechHidppBootloader *self,
 					  guint16 addr,
 					  guint8 len,
 					  const guint8 *data,
 					  GError **error)
 {
-	g_autoptr(FuLogitechHidPpBootloaderRequest) req =
+	g_autoptr(FuLogitechHidppBootloaderRequest) req =
 	    fu_logitech_hidpp_bootloader_request_new();
-	req->cmd = FU_UNIFYING_BOOTLOADER_CMD_WRITE;
+	req->cmd = FU_LOGITECH_HIDPP_BOOTLOADER_CMD_WRITE;
 	req->addr = addr;
 	req->len = len;
 	if (req->len > 28) {
 		g_set_error(error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_FAILED,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_WRITE,
 			    "failed to write @%04x: data length too large %02x",
 			    addr,
 			    req->len);
 		return FALSE;
 	}
-	memcpy(req->data, data, req->len);
+	memcpy(req->data, data, req->len); /* nocheck:blocked */
 	if (!fu_logitech_hidpp_bootloader_request(self, req, error)) {
 		g_prefix_error(error, "failed to transfer fw @0x%02x: ", addr);
 		return FALSE;
 	}
-	if (req->cmd == FU_UNIFYING_BOOTLOADER_CMD_WRITE_INVALID_ADDR) {
+	if (req->cmd == FU_LOGITECH_HIDPP_BOOTLOADER_CMD_WRITE_INVALID_ADDR) {
 		g_set_error(error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_FAILED,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_NOT_SUPPORTED,
 			    "failed to write @%04x: invalid address",
 			    addr);
 		return FALSE;
 	}
-	if (req->cmd == FU_UNIFYING_BOOTLOADER_CMD_WRITE_VERIFY_FAIL) {
+	if (req->cmd == FU_LOGITECH_HIDPP_BOOTLOADER_CMD_WRITE_VERIFY_FAIL) {
 		g_set_error(error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_FAILED,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_WRITE,
 			    "failed to write @%04x: failed to verify flash content",
 			    addr);
 		return FALSE;
 	}
-	if (req->cmd == FU_UNIFYING_BOOTLOADER_CMD_WRITE_NONZERO_START) {
+	if (req->cmd == FU_LOGITECH_HIDPP_BOOTLOADER_CMD_WRITE_NONZERO_START) {
 		g_debug("wrote %d bytes at address %04x, value %02x",
 			req->len,
 			req->addr,
 			req->data[0]);
 		g_set_error(error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_FAILED,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_NOT_SUPPORTED,
 			    "failed to write @%04x: only 1 byte write of 0xff supported",
 			    addr);
 		return FALSE;
 	}
-	if (req->cmd == FU_UNIFYING_BOOTLOADER_CMD_WRITE_INVALID_CRC) {
+	if (req->cmd == FU_LOGITECH_HIDPP_BOOTLOADER_CMD_WRITE_INVALID_CRC) {
 		g_set_error(error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_FAILED,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_INVALID_DATA,
 			    "failed to write @%04x: invalid CRC",
 			    addr);
 		return FALSE;
@@ -182,31 +183,31 @@ fu_logitech_hidpp_bootloader_nordic_write(FuLogitechHidPpBootloader *self,
 }
 
 static gboolean
-fu_logitech_hidpp_bootloader_nordic_erase(FuLogitechHidPpBootloader *self,
+fu_logitech_hidpp_bootloader_nordic_erase(FuLogitechHidppBootloader *self,
 					  guint16 addr,
 					  GError **error)
 {
-	g_autoptr(FuLogitechHidPpBootloaderRequest) req =
+	g_autoptr(FuLogitechHidppBootloaderRequest) req =
 	    fu_logitech_hidpp_bootloader_request_new();
-	req->cmd = FU_UNIFYING_BOOTLOADER_CMD_ERASE_PAGE;
+	req->cmd = FU_LOGITECH_HIDPP_BOOTLOADER_CMD_ERASE_PAGE;
 	req->addr = addr;
 	req->len = 0x01;
 	if (!fu_logitech_hidpp_bootloader_request(self, req, error)) {
 		g_prefix_error(error, "failed to erase fw @0x%02x: ", addr);
 		return FALSE;
 	}
-	if (req->cmd == FU_UNIFYING_BOOTLOADER_CMD_ERASE_PAGE_INVALID_ADDR) {
+	if (req->cmd == FU_LOGITECH_HIDPP_BOOTLOADER_CMD_ERASE_PAGE_INVALID_ADDR) {
 		g_set_error(error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_FAILED,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_NOT_SUPPORTED,
 			    "failed to erase @%04x: invalid page",
 			    addr);
 		return FALSE;
 	}
-	if (req->cmd == FU_UNIFYING_BOOTLOADER_CMD_ERASE_PAGE_NONZERO_START) {
+	if (req->cmd == FU_LOGITECH_HIDPP_BOOTLOADER_CMD_ERASE_PAGE_NONZERO_START) {
 		g_set_error(error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_FAILED,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_NOT_SUPPORTED,
 			    "failed to erase @%04x: byte 0x00 is not 0xff",
 			    addr);
 		return FALSE;
@@ -221,8 +222,8 @@ fu_logitech_hidpp_bootloader_nordic_write_firmware(FuDevice *device,
 						   FwupdInstallFlags flags,
 						   GError **error)
 {
-	FuLogitechHidPpBootloader *self = FU_UNIFYING_BOOTLOADER(device);
-	const FuLogitechHidPpBootloaderRequest *payload;
+	FuLogitechHidppBootloader *self = FU_LOGITECH_HIDPP_BOOTLOADER(device);
+	const FuLogitechHidppBootloaderRequest *payload;
 	guint16 addr;
 	g_autoptr(GBytes) fw = NULL;
 	g_autoptr(GPtrArray) reqs = NULL;
@@ -265,7 +266,7 @@ fu_logitech_hidpp_bootloader_nordic_write_firmware(FuDevice *device,
 		gboolean res;
 		payload = g_ptr_array_index(reqs, i);
 
-		if (payload->cmd == FU_UNIFYING_BOOTLOADER_CMD_WRITE_SIGNATURE) {
+		if (payload->cmd == FU_LOGITECH_HIDPP_BOOTLOADER_CMD_WRITE_SIGNATURE) {
 			res = fu_logitech_hidpp_bootloader_nordic_write_signature(self,
 										  payload->addr,
 										  payload->len,
@@ -305,14 +306,14 @@ fu_logitech_hidpp_bootloader_nordic_write_firmware(FuDevice *device,
 }
 
 static void
-fu_logitech_hidpp_bootloader_nordic_class_init(FuLogitechHidPpBootloaderNordicClass *klass)
+fu_logitech_hidpp_bootloader_nordic_class_init(FuLogitechHidppBootloaderNordicClass *klass)
 {
-	FuDeviceClass *klass_device = FU_DEVICE_CLASS(klass);
-	klass_device->write_firmware = fu_logitech_hidpp_bootloader_nordic_write_firmware;
-	klass_device->setup = fu_logitech_hidpp_bootloader_nordic_setup;
+	FuDeviceClass *device_class = FU_DEVICE_CLASS(klass);
+	device_class->write_firmware = fu_logitech_hidpp_bootloader_nordic_write_firmware;
+	device_class->setup = fu_logitech_hidpp_bootloader_nordic_setup;
 }
 
 static void
-fu_logitech_hidpp_bootloader_nordic_init(FuLogitechHidPpBootloaderNordic *self)
+fu_logitech_hidpp_bootloader_nordic_init(FuLogitechHidppBootloaderNordic *self)
 {
 }

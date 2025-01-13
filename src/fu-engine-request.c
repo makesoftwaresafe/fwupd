@@ -1,61 +1,58 @@
 /*
- * Copyright (C) 2020 Richard Hughes <richard@hughsie.com>
+ * Copyright 2020 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #define G_LOG_DOMAIN "FuEngine"
 
 #include "config.h"
 
+#include <fwupd.h>
+
 #include "fu-engine-request.h"
 
 struct _FuEngineRequest {
 	GObject parent_instance;
-	FuEngineRequestFlags flags;
+	FuEngineRequestFlag flags;
 	FwupdFeatureFlags feature_flags;
-	FwupdDeviceFlags device_flags;
+	FwupdCodecFlags converter_flags;
+	gchar *sender;
 	gchar *locale;
 };
 
-G_DEFINE_TYPE(FuEngineRequest, fu_engine_request, G_TYPE_OBJECT)
+static void
+fu_engine_request_codec_iface_init(FwupdCodecInterface *iface);
 
-static const gchar *
-fu_engine_request_flag_to_string(FuEngineRequestFlags flag)
-{
-	if (flag == FU_ENGINE_REQUEST_FLAG_NO_REQUIREMENTS)
-		return "no-requirements";
-	if (flag == FU_ENGINE_REQUEST_FLAG_ANY_RELEASE)
-		return "any-release";
-	return NULL;
-}
+G_DEFINE_TYPE_WITH_CODE(FuEngineRequest,
+			fu_engine_request,
+			G_TYPE_OBJECT,
+			G_IMPLEMENT_INTERFACE(FWUPD_TYPE_CODEC, fu_engine_request_codec_iface_init))
 
-static gchar *
-fu_engine_request_flags_to_string(FuEngineRequestFlags flags)
+static void
+fu_engine_request_add_string(FwupdCodec *codec, guint idt, GString *str)
 {
-	g_autoptr(GString) str = g_string_new(NULL);
-	for (guint i = 0; i < 64; i++) {
-		if ((flags & ((guint64)1 << i)) == 0)
-			continue;
-		if (str->len > 0)
-			g_string_append(str, "|");
-		g_string_append(str, fu_engine_request_flag_to_string((guint64)1 << i));
-	}
-	return g_string_free(g_steal_pointer(&str), FALSE);
-}
-
-void
-fu_engine_request_add_string(FuEngineRequest *self, guint idt, GString *str)
-{
-	g_return_if_fail(FU_IS_ENGINE_REQUEST(self));
+	FuEngineRequest *self = FU_ENGINE_REQUEST(codec);
 	if (self->flags != FU_ENGINE_REQUEST_FLAG_NONE) {
-		g_autofree gchar *flags = fu_engine_request_flags_to_string(self->flags);
-		fu_string_append(str, idt, "Flags", flags);
+		g_autofree gchar *flags = fu_engine_request_flag_to_string(self->flags);
+		fwupd_codec_string_append(str, idt, "Flags", flags);
 	}
-	fu_string_append_kx(str, idt, "FeatureFlags", self->feature_flags);
-	fu_string_append_kx(str, idt, "DeviceFlags", self->device_flags);
-	if (self->locale != NULL)
-		fu_string_append(str, idt, "Locale", self->locale);
+	fwupd_codec_string_append_hex(str, idt, "FeatureFlags", self->feature_flags);
+	fwupd_codec_string_append_hex(str, idt, "ConverterFlags", self->converter_flags);
+	fwupd_codec_string_append(str, idt, "Locale", self->locale);
+}
+
+static void
+fu_engine_request_codec_iface_init(FwupdCodecInterface *iface)
+{
+	iface->add_string = fu_engine_request_add_string;
+}
+
+const gchar *
+fu_engine_request_get_sender(FuEngineRequest *self)
+{
+	g_return_val_if_fail(FU_IS_ENGINE_REQUEST(self), NULL);
+	return self->sender;
 }
 
 FwupdFeatureFlags
@@ -73,14 +70,14 @@ fu_engine_request_get_locale(FuEngineRequest *self)
 }
 
 void
-fu_engine_request_add_flag(FuEngineRequest *self, FuEngineRequestFlags flag)
+fu_engine_request_add_flag(FuEngineRequest *self, FuEngineRequestFlag flag)
 {
 	g_return_if_fail(FU_IS_ENGINE_REQUEST(self));
 	self->flags |= flag;
 }
 
 gboolean
-fu_engine_request_has_flag(FuEngineRequest *self, FuEngineRequestFlags flag)
+fu_engine_request_has_flag(FuEngineRequest *self, FuEngineRequestFlag flag)
 {
 	g_return_val_if_fail(FU_IS_ENGINE_REQUEST(self), FU_ENGINE_REQUEST_FLAG_NONE);
 	return (self->flags & flag) > 0;
@@ -117,32 +114,32 @@ fu_engine_request_has_feature_flag(FuEngineRequest *self, FwupdFeatureFlags feat
 	return (self->feature_flags & feature_flag) > 0;
 }
 
-FwupdDeviceFlags
-fu_engine_request_get_device_flags(FuEngineRequest *self)
+FwupdCodecFlags
+fu_engine_request_get_converter_flags(FuEngineRequest *self)
 {
 	g_return_val_if_fail(FU_IS_ENGINE_REQUEST(self), FALSE);
-	return self->device_flags;
+	return self->converter_flags;
 }
 
 void
-fu_engine_request_set_device_flags(FuEngineRequest *self, FwupdDeviceFlags device_flags)
+fu_engine_request_set_converter_flags(FuEngineRequest *self, FwupdCodecFlags converter_flags)
 {
 	g_return_if_fail(FU_IS_ENGINE_REQUEST(self));
-	self->device_flags = device_flags;
+	self->converter_flags = converter_flags;
 }
 
 gboolean
-fu_engine_request_has_device_flag(FuEngineRequest *self, FwupdDeviceFlags device_flag)
+fu_engine_request_has_converter_flag(FuEngineRequest *self, FwupdCodecFlags device_flag)
 {
 	g_return_val_if_fail(FU_IS_ENGINE_REQUEST(self), FALSE);
-	return (self->device_flags & device_flag) > 0;
+	return (self->converter_flags & device_flag) > 0;
 }
 
 static void
 fu_engine_request_init(FuEngineRequest *self)
 {
 	self->flags = FU_ENGINE_REQUEST_FLAG_NONE;
-	self->device_flags = FWUPD_DEVICE_FLAG_NONE;
+	self->converter_flags = FWUPD_CODEC_FLAG_NONE;
 	self->feature_flags = FWUPD_FEATURE_FLAG_NONE;
 }
 
@@ -150,6 +147,7 @@ static void
 fu_engine_request_finalize(GObject *obj)
 {
 	FuEngineRequest *self = FU_ENGINE_REQUEST(obj);
+	g_free(self->sender);
 	g_free(self->locale);
 	G_OBJECT_CLASS(fu_engine_request_parent_class)->finalize(obj);
 }
@@ -162,9 +160,10 @@ fu_engine_request_class_init(FuEngineRequestClass *klass)
 }
 
 FuEngineRequest *
-fu_engine_request_new(void)
+fu_engine_request_new(const gchar *sender)
 {
 	FuEngineRequest *self;
 	self = g_object_new(FU_TYPE_ENGINE_REQUEST, NULL);
+	self->sender = g_strdup(sender);
 	return FU_ENGINE_REQUEST(self);
 }

@@ -1,18 +1,16 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 # pylint: disable=invalid-name,missing-docstring
 #
-# Copyright (C) 2022 Richard Hughes <richard@hughsie.com>
+# Copyright 2022 Richard Hughes <richard@hughsie.com>
 #
-# SPDX-License-Identifier: LGPL-2.1+
+# SPDX-License-Identifier: LGPL-2.1-or-later
 
 import argparse
 import sys
 import json
-import os
-from typing import Dict, List, Any
+from typing import List
 
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "filename_src", action="store", type=str, help="markdown source"
@@ -32,17 +30,17 @@ if __name__ == "__main__":
             with open(fn, "rb") as f:
                 item = json.loads(f.read())
         except json.decoder.JSONDecodeError as e:
-            print("failed to parse {}: {}".format(fn, str(e)))
+            print(f"failed to parse {fn}: {str(e)}")
             sys.exit(1)
         if "id" not in item:
-            print("skipping {} as no id".format(fn))
+            print(f"skipping {fn} as no id")
             continue
-        txt += ['<a id="{}"></a>'.format(item["id"])]
+        txt += [f"<a id=\"{item['id']}\"></a>"]
         if "deprecated-ids" in item:
             for deprecated_id in item["deprecated-ids"]:
-                txt += ['<a id="{}"></a>'.format(deprecated_id)]
+                txt += [f'<a id="{deprecated_id}"></a>']
         if "name" in item:
-            txt += ["### [{}](#{})".format(item["name"], item["id"])]
+            txt += [f"### [{item['name']}](#{item['id']})"]
         if "description" in item:
             for para in item["description"]:
                 txt += [para]
@@ -54,9 +52,9 @@ if __name__ == "__main__":
             txt += ["**Possible results:**"]
             tmp: List[str] = []
             for value, desc in item["failure-results"].items():
-                tmp += ["- `{}`: {} (failure)".format(value, desc)]
+                tmp += [f"- `{value}`: {desc} (failure)"]
             for value, desc in item["success-results"].items():
-                tmp += ["- `{}`: {} (success)".format(value, desc)]
+                tmp += [f"- `{value}`: {desc} (success)"]
             txt += ["\n".join(tmp)]
         if "hsi-level" in item and "fwupd-version" in item:
             txt += [
@@ -66,25 +64,21 @@ if __name__ == "__main__":
                 )
             ]
         if "resolution" in item:
-            txt += ["**Resolution:** {}".format(item["resolution"])]
+            txt += [f"**Resolution:** {item['resolution']}"]
         if "issues" in item:
             txt += ["**Issues:**"]
             tmp: List[str] = []
             for issue in item["issues"]:
                 if issue.startswith("CVE-"):
-                    tmp += [
-                        "- [{}](https://nvd.nist.gov/vuln/detail/{})".format(
-                            issue, issue
-                        )
-                    ]
+                    tmp += [f"- [{issue}](https://nvd.nist.gov/vuln/detail/{issue})"]
                 else:
-                    tmp += ["- {}".format(issue)]
+                    tmp += [f"- {issue}"]
             txt += ["\n".join(tmp)]
         if "references" in item:
             txt += ["**References:**"]
             tmp: List[str] = []
             for url, title in item["references"].items():
-                tmp += ["- [{}]({})".format(title, url)]
+                tmp += [f"- [{title}]({url})"]
             txt += ["\n".join(tmp)]
         if "requires" in item:
             txt += ["**Hardware requirements:**"]

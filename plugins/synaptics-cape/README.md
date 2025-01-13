@@ -22,8 +22,7 @@ These devices use the standard USB DeviceInstanceId values, e.g.
 
 These devices also use custom GUID values, e.g.
 
-* `SYNAPTICS_CAPE\CX31993`
-* `SYNAPTICS_CAPE\CX31988`
+* `SYNAPTICS_CAPE\CX31993` (only-quirk)
 
 ## Update Behavior
 
@@ -34,10 +33,16 @@ device will reset when the new firmware has been written.
 
 The vendor ID is set from the USB vendor, in this instance set to `USB:0x1395`
 
-### Plugin-specific flags
+## Quirk Use
 
-* use-in-report-interrupt: some devices will support IN_REPORT that allow host communicate with
-  device over interrupt instead of control endpoint, since: 1.7.0
+This plugin uses the following plugin-specific quirks:
+
+### `Flags=use-in-report-interrupt`
+
+Some devices will support IN_REPORT that allow host communicate with device over interrupt instead
+of control endpoint.
+
+Since: 1.7.0
 
 ## External Interface Access
 
@@ -46,3 +51,10 @@ This plugin requires read/write access to `/dev/bus/usb`.
 ## Version Considerations
 
 This plugin has been available since fwupd version `1.7.0`.
+
+## Owners
+
+Anyone can submit a pull request to modify this plugin, but the following people should be
+consulted before making major or functional changes:
+
+* Simon Ho: @CNXT-Simon

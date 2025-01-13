@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2016 Richard Hughes <richard@hughsie.com>
+ * Copyright 2016 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #include "config.h"
@@ -33,8 +33,8 @@ fu_logitech_hidpp_plugin_constructed(GObject *obj)
 	fu_context_add_quirk_key(ctx, "LogitechHidppModelId");
 	fu_plugin_add_udev_subsystem(plugin, "hidraw");
 	fu_plugin_add_rule(plugin, FU_PLUGIN_RULE_CONFLICTS, "unifying");
-	fu_plugin_add_device_gtype(plugin, FU_TYPE_UNIFYING_BOOTLOADER_NORDIC);
-	fu_plugin_add_device_gtype(plugin, FU_TYPE_UNIFYING_BOOTLOADER_TEXAS);
+	fu_plugin_add_device_gtype(plugin, FU_TYPE_LOGITECH_HIDPP_BOOTLOADER_NORDIC);
+	fu_plugin_add_device_gtype(plugin, FU_TYPE_LOGITECH_HIDPP_BOOTLOADER_TEXAS);
 	fu_plugin_add_device_gtype(plugin, FU_TYPE_HIDPP_RUNTIME_UNIFYING);
 	fu_plugin_add_device_gtype(plugin, FU_TYPE_HIDPP_DEVICE);
 	fu_plugin_add_device_gtype(plugin, FU_TYPE_HIDPP_RUNTIME_BOLT);

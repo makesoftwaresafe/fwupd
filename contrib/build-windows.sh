@@ -20,31 +20,21 @@ meson setup .. \
     --libexecdir="bin" \
     --bindir="bin" \
     -Dbuild=all \
+    -Ddbus_socket_address="tcp:host=localhost,port=1341" \
     -Dman=false \
     -Dfish_completion=false \
     -Dbash_completion=false \
     -Dfirmware-packager=false \
     -Dmetainfo=false \
-    -Dcompat_cli=false \
-    -Dsoup_session_compat=false \
-    -Dgcab:introspection=false \
-    -Dgcab:docs=false \
-    -Dgcab:nls=false \
-    -Dgcab:vapi=false \
-    -Dgcab:tests=false \
     -Dlibxmlb:introspection=false \
     -Dlibxmlb:gtkdoc=false \
     -Dlibjcat:man=false \
     -Dlibjcat:gpg=false \
     -Dlibjcat:tests=false \
-    -Dlibjcat:introspection=false \
-    -Dgusb:tests=false \
-    -Dgusb:docs=false \
-    -Dgusb:introspection=false \
-    -Dgusb:vapi=false
+    -Dlibjcat:introspection=false
 
 # run tests
-export WINEPATH="/usr/x86_64-w64-mingw32/sys-root/mingw/bin/;$build/libfwupd/;$build/libfwupdplugin/;$build/subprojects/libxmlb/src/;$build/subprojects/gcab/libgcab/;$build/subprojects/libjcat/libjcat/;$build/subprojects/gusb/gusb/"
+export WINEPATH="/usr/x86_64-w64-mingw32/sys-root/mingw/bin/;$build/libfwupd/;$build/libfwupdplugin/;$build/subprojects/libxmlb/src/;$build/subprojects/libjcat/libjcat/"
 ninja -C "$build" install
 ninja -C "$build" test
 
@@ -62,7 +52,7 @@ cp -f -v \
 	$MINGW32BINDIR/libbrotlicommon.dll \
 	$MINGW32BINDIR/libbrotlidec.dll \
 	$MINGW32BINDIR/libbz2-1.dll \
-	$MINGW32BINDIR/libcrypto-1_1-x64.dll \
+	$MINGW32BINDIR/libcrypto-3-x64.dll \
 	$MINGW32BINDIR/libcurl-4.dll \
 	$MINGW32BINDIR/libffi-*.dll \
 	$MINGW32BINDIR/libgcc_s_seh-1.dll \
@@ -72,7 +62,6 @@ cp -f -v \
 	$MINGW32BINDIR/libgmp-10.dll \
 	$MINGW32BINDIR/libgnutls-30.dll \
 	$MINGW32BINDIR/libgobject-2.0-0.dll \
-	$MINGW32BINDIR/libgusb-2.dll \
 	$MINGW32BINDIR/libhogweed-*.dll \
 	$MINGW32BINDIR/libidn2-0.dll \
 	$MINGW32BINDIR/libintl-8.dll \
@@ -80,14 +69,15 @@ cp -f -v \
 	$MINGW32BINDIR/liblzma-5.dll \
 	$MINGW32BINDIR/libnettle-*.dll \
 	$MINGW32BINDIR/libp11-kit-0.dll \
-	$MINGW32BINDIR/libpcre-1.dll \
+	$MINGW32BINDIR/libpcre2-8-0.dll \
 	$MINGW32BINDIR/libsqlite3-0.dll \
 	$MINGW32BINDIR/libssh2-1.dll \
-	$MINGW32BINDIR/libssl-1_1-x64.dll \
+	$MINGW32BINDIR/libssl-3-x64.dll \
 	$MINGW32BINDIR/libssp-0.dll \
 	$MINGW32BINDIR/libtasn1-6.dll \
 	$MINGW32BINDIR/libusb-1.0.dll \
 	$MINGW32BINDIR/libwinpthread-1.dll \
 	$MINGW32BINDIR/libxml2-2.dll \
+	$MINGW32BINDIR/libzstd.dll \
 	$MINGW32BINDIR/zlib1.dll \
 	"$DESTDIR/bin/"

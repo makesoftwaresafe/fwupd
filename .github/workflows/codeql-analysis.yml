@@ -6,10 +6,13 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+
 jobs:
   analyze:
     name: Analyze
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     permissions:
       actions: read
       contents: read
@@ -22,25 +25,26 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
     - name: Initialize CodeQL
-      uses: github/codeql-action/init@v2
+      uses: github/codeql-action/init@df409f7d9260372bd5f19e5b04e83cb3c43714ae # v3.27.9
       with:
         languages: ${{ matrix.language }}
 
     - name: Install dependencies
-      run: >
-        sudo apt-get update &&
-        sudo ./contrib/ci/fwupd_setup_helpers.py install-dependencies --yes -o ubuntu &&
-        python3 -m pip install --user "meson >= 0.60.0"
+      run: |
+        sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
+        sudo apt-get update
+        sudo ./contrib/ci/fwupd_setup_helpers.py install-dependencies --yes -o ubuntu
+        python3 -m pip install --user "meson >= 0.62.0"
 
     - name: Build
       run: |
         mkdir -p $GITHUB_WORKSPACE/build
         cd $GITHUB_WORKSPACE/build
-        meson setup .. -Dman=false --prefix=$GITHUB_WORKSPACE/dist
+        meson setup .. -Dman=false --prefix=$GITHUB_WORKSPACE/dist -Dlibxmlb:gtkdoc=false
         ninja
 
     - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v2
+      uses: github/codeql-action/analyze@df409f7d9260372bd5f19e5b04e83cb3c43714ae # v3.27.9

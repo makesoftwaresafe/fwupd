@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2021 Richard Hughes <richard@hughsie.com>
+ * Copyright 2021 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #include "config.h"
@@ -30,12 +30,10 @@ fu_redfish_device_to_string(FuDevice *device, guint idt, GString *str)
 {
 	FuRedfishDevice *self = FU_REDFISH_DEVICE(device);
 	FuRedfishDevicePrivate *priv = GET_PRIVATE(self);
-	if (priv->milestone > 0x0)
-		fu_string_append_kx(str, idt, "Milestone", priv->milestone);
-	if (priv->build != NULL)
-		fu_string_append(str, idt, "Build", priv->build);
-	fu_string_append_ku(str, idt, "ResetPretDelay", priv->reset_pre_delay);
-	fu_string_append_ku(str, idt, "ResetPostDelay", priv->reset_post_delay);
+	fwupd_codec_string_append_hex(str, idt, "Milestone", priv->milestone);
+	fwupd_codec_string_append(str, idt, "Build", priv->build);
+	fwupd_codec_string_append_int(str, idt, "ResetPretDelay", priv->reset_pre_delay);
+	fwupd_codec_string_append_int(str, idt, "ResetPostDelay", priv->reset_post_delay);
 }
 
 static void
@@ -93,38 +91,54 @@ fu_redfish_device_probe_related_pcie_item(FuRedfishDevice *self, const gchar *ur
 	if (json_object_has_member(json_obj, "VendorId")) {
 		const gchar *tmp = json_object_get_string_member(json_obj, "VendorId");
 		if (tmp != NULL && tmp[0] != '\0') {
-			if (!fu_strtoull(tmp, &vendor_id, 0, G_MAXUINT16, error))
+			if (!fu_strtoull(tmp,
+					 &vendor_id,
+					 0,
+					 G_MAXUINT16,
+					 FU_INTEGER_BASE_AUTO,
+					 error))
 				return FALSE;
 		}
 	}
 	if (json_object_has_member(json_obj, "DeviceId")) {
 		const gchar *tmp = json_object_get_string_member(json_obj, "DeviceId");
 		if (tmp != NULL && tmp[0] != '\0') {
-			if (!fu_strtoull(tmp, &model_id, 0, G_MAXUINT16, error))
+			if (!fu_strtoull(tmp,
+					 &model_id,
+					 0,
+					 G_MAXUINT16,
+					 FU_INTEGER_BASE_AUTO,
+					 error))
 				return FALSE;
 		}
 	}
 	if (json_object_has_member(json_obj, "SubsystemVendorId")) {
 		const gchar *tmp = json_object_get_string_member(json_obj, "SubsystemVendorId");
 		if (tmp != NULL && tmp[0] != '\0') {
-			if (!fu_strtoull(tmp, &subsystem_vendor_id, 0, G_MAXUINT16, error))
+			if (!fu_strtoull(tmp,
+					 &subsystem_vendor_id,
+					 0,
+					 G_MAXUINT16,
+					 FU_INTEGER_BASE_AUTO,
+					 error))
 				return FALSE;
 		}
 	}
 	if (json_object_has_member(json_obj, "SubsystemId")) {
 		const gchar *tmp = json_object_get_string_member(json_obj, "SubsystemId");
 		if (tmp != NULL && tmp[0] != '\0') {
-			if (!fu_strtoull(tmp, &subsystem_model_id, 0, G_MAXUINT16, error))
+			if (!fu_strtoull(tmp,
+					 &subsystem_model_id,
+					 0,
+					 G_MAXUINT16,
+					 FU_INTEGER_BASE_AUTO,
+					 error))
 				return FALSE;
 		}
 	}
 
 	/* add vendor ID */
-	if (vendor_id != 0x0) {
-		g_autofree gchar *vendor_id_str = NULL;
-		vendor_id_str = g_strdup_printf("PCI:0x%04X", (guint)vendor_id);
-		fu_device_add_vendor_id(FU_DEVICE(self), vendor_id_str);
-	}
+	fu_device_build_vendor_id_u16(FU_DEVICE(self), "PCI", vendor_id);
 
 	/* add more instance IDs if possible */
 	if (vendor_id != 0x0)
@@ -241,14 +255,8 @@ fu_redfish_device_set_version_lenovo(FuRedfishDevice *self, const gchar *version
 		return FALSE;
 
 	/* split out milestone */
-	priv->milestone = g_ascii_strtoull(out_build, NULL, 10);
-	if (priv->milestone == 0) {
-		g_set_error(error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_INVALID_DATA,
-			    "version milestone invalid");
+	if (!fu_strtoull(out_build, &priv->milestone, 0, G_MAXUINT64, FU_INTEGER_BASE_10, error))
 		return FALSE;
-	}
 
 	/* odd numbered builds are unsigned */
 	if (priv->milestone % 2 != 0) {
@@ -257,7 +265,7 @@ fu_redfish_device_set_version_lenovo(FuRedfishDevice *self, const gchar *version
 
 	/* build is only one letter from A -> Z */
 	if (!g_ascii_isalpha(out_build[2])) {
-		g_set_error(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA, "build letter invalid");
+		g_set_error(error, FWUPD_ERROR, FWUPD_ERROR_INVALID_DATA, "build letter invalid");
 		return FALSE;
 	}
 	priv->build = g_strndup(out_build + 2, 1);
@@ -346,7 +354,6 @@ static void
 fu_redfish_device_set_vendor(FuRedfishDevice *self, const gchar *vendor)
 {
 	g_autofree gchar *vendor_upper = NULL;
-	g_autofree gchar *vendor_id = NULL;
 
 	/* fixup a common mistake */
 	if (g_strcmp0(vendor, "LEN") == 0 || g_strcmp0(vendor, "LNVO") == 0)
@@ -356,14 +363,12 @@ fu_redfish_device_set_vendor(FuRedfishDevice *self, const gchar *vendor)
 	/* add vendor-id */
 	vendor_upper = g_ascii_strup(vendor, -1);
 	g_strdelimit(vendor_upper, " ", '_');
-	vendor_id = g_strdup_printf("REDFISH:%s", vendor_upper);
-	fu_device_add_vendor_id(FU_DEVICE(self), vendor_id);
+	fu_device_build_vendor_id(FU_DEVICE(self), "REDFISH", vendor_upper);
 }
 
 static void
-fu_redfish_backend_smc_license_check(FuDevice *device)
+fu_redfish_device_smc_license_check(FuRedfishDevice *self)
 {
-	FuRedfishDevice *self = FU_REDFISH_DEVICE(device);
 	FuRedfishBackend *backend = fu_redfish_device_get_backend(self);
 	g_autoptr(FuRedfishRequest) request = fu_redfish_backend_request_new(backend);
 	g_autoptr(GError) error_local = NULL;
@@ -373,10 +378,12 @@ fu_redfish_backend_smc_license_check(FuDevice *device)
 					fu_redfish_backend_get_push_uri_path(backend),
 					FU_REDFISH_REQUEST_PERFORM_FLAG_LOAD_JSON,
 					&error_local)) {
-		if (g_error_matches(error_local, FWUPD_ERROR, FWUPD_ERROR_NOT_SUPPORTED))
-			fu_device_add_problem(device, FWUPD_DEVICE_PROBLEM_MISSING_LICENSE);
-		else
-			g_debug("supermicro license check returned %s\n", error_local->message);
+		if (g_error_matches(error_local, FWUPD_ERROR, FWUPD_ERROR_NOT_SUPPORTED)) {
+			fu_device_add_problem(FU_DEVICE(self),
+					      FWUPD_DEVICE_PROBLEM_MISSING_LICENSE);
+		} else {
+			g_debug("supermicro license check returned %s", error_local->message);
+		}
 	}
 }
 
@@ -388,6 +395,12 @@ fu_redfish_device_probe(FuDevice *dev, GError **error)
 	JsonObject *member = priv->member;
 	const gchar *guid = NULL;
 	g_autofree gchar *guid_lower = NULL;
+
+	/* sanity check */
+	if (priv->member == NULL) {
+		g_set_error_literal(error, FWUPD_ERROR, FWUPD_ERROR_NOT_SUPPORTED, "no member");
+		return FALSE;
+	}
 
 	/* required to POST later */
 	if (!json_object_has_member(member, "@odata.id")) {
@@ -464,7 +477,7 @@ fu_redfish_device_probe(FuDevice *dev, GError **error)
 	/* some vendors use a GUID, others use an ID like BMC-AFBT-10 */
 	guid_lower = g_ascii_strdown(guid, -1);
 	if (fwupd_guid_is_valid(guid_lower)) {
-		fu_device_add_guid(dev, guid_lower);
+		fu_device_add_instance_id(dev, guid_lower);
 	} else {
 		if (fu_device_has_private_flag(dev, FU_REDFISH_DEVICE_FLAG_UNSIGNED_BUILD))
 			fu_device_add_instance_str(dev, "TYPE", "UNSIGNED");
@@ -495,7 +508,7 @@ fu_redfish_device_probe(FuDevice *dev, GError **error)
 	if (json_object_has_member(member, "Description")) {
 		const gchar *tmp = json_object_get_string_member(member, "Description");
 		if (tmp != NULL && tmp[0] != '\0')
-			fu_device_set_description(dev, tmp);
+			fu_device_set_summary(dev, tmp);
 	}
 
 	/* reasons why the device might not be updatable */
@@ -526,7 +539,7 @@ fu_redfish_device_probe(FuDevice *dev, GError **error)
 
 	/* for Supermicro check whether we have a proper Redfish license installed */
 	if (g_strcmp0("SMCI", fu_device_get_vendor(dev)) == 0)
-		fu_redfish_backend_smc_license_check(dev);
+		fu_redfish_device_smc_license_check(self);
 
 	/* success */
 	return TRUE;
@@ -553,79 +566,83 @@ fu_redfish_device_poll_set_message_id(FuRedfishDevice *self,
 				      const gchar *message_id)
 {
 	/* ignore */
-	if (g_strcmp0(message_id, "TaskEvent.1.0.TaskProgressChanged") == 0 ||
-	    g_strcmp0(message_id, "TaskEvent.1.0.TaskCompletedWarning") == 0 ||
-	    g_strcmp0(message_id, "TaskEvent.1.0.TaskCompletedOK") == 0 ||
-	    g_strcmp0(message_id, "Base.1.6.Success") == 0)
+	if (g_pattern_match_simple("TaskEvent.*.TaskProgressChanged", message_id) ||
+	    g_pattern_match_simple("TaskEvent.*.TaskCompletedWarning", message_id) ||
+	    g_pattern_match_simple("TaskEvent.*.TaskCompletedOK", message_id) ||
+	    g_pattern_match_simple("Base.*.Success", message_id))
 		return;
 
 	/* set flags */
-	if (g_strcmp0(message_id, "Base.1.10.ResetRequired") == 0) {
+	if (g_pattern_match_simple("Base.*.ResetRequired", message_id)) {
 		fu_device_add_flag(FU_DEVICE(self), FWUPD_DEVICE_FLAG_NEEDS_REBOOT);
 		return;
 	}
 
 	/* set error code */
-	if (g_strcmp0(message_id, "Update.1.0.AwaitToActivate") == 0) {
+	if (g_pattern_match_simple("Update.*.AwaitToActivate", message_id)) {
 		ctx->error_code = FWUPD_ERROR_NEEDS_USER_ACTION;
 		return;
 	}
-	if (g_strcmp0(message_id, "Update.1.0.TransferFailed") == 0) {
+	if (g_pattern_match_simple("Update.*.TransferFailed", message_id)) {
 		ctx->error_code = FWUPD_ERROR_WRITE;
 		return;
 	}
-	if (g_strcmp0(message_id, "Update.1.0.ActivateFailed") == 0) {
+	if (g_pattern_match_simple("Update.*.ActivateFailed", message_id)) {
 		ctx->error_code = FWUPD_ERROR_INVALID_FILE;
 		return;
 	}
-	if (g_strcmp0(message_id, "Update.1.0.VerificationFailed") == 0 ||
-	    g_strcmp0(message_id, "LenovoFirmwareUpdateRegistry.1.0.UpdateVerifyFailed") == 0) {
+	if (g_pattern_match_simple("Update.*.VerificationFailed", message_id) ||
+	    g_pattern_match_simple("LenovoFirmwareUpdateRegistry.*.UpdateVerifyFailed",
+				   message_id)) {
 		ctx->error_code = FWUPD_ERROR_INVALID_FILE;
 		return;
 	}
-	if (g_strcmp0(message_id, "Update.1.0.ApplyFailed") == 0) {
+	if (g_pattern_match_simple("Update.*.ApplyFailed", message_id)) {
 		ctx->error_code = FWUPD_ERROR_WRITE;
 		return;
 	}
 
 	/* set status */
-	if (g_strcmp0(message_id, "Update.1.1.TargetDetermined") == 0) {
+	if (g_pattern_match_simple("Update.*.TargetDetermined", message_id)) {
 		fu_progress_set_status(ctx->progress, FWUPD_STATUS_LOADING);
 		return;
 	}
-	if (g_strcmp0(message_id, "LenovoFirmwareUpdateRegistry.1.0.UpdateAssignment") == 0) {
+	if (g_pattern_match_simple("LenovoFirmwareUpdateRegistry.*.UpdateAssignment", message_id)) {
 		fu_progress_set_status(ctx->progress, FWUPD_STATUS_LOADING);
 		return;
 	}
-	if (g_strcmp0(message_id, "LenovoFirmwareUpdateRegistry.1.0.PayloadApplyInProgress") == 0) {
+	if (g_pattern_match_simple("LenovoFirmwareUpdateRegistry.*.PayloadApplyInProgress",
+				   message_id)) {
 		fu_progress_set_status(ctx->progress, FWUPD_STATUS_DEVICE_WRITE);
 		return;
 	}
-	if (g_strcmp0(message_id, "LenovoFirmwareUpdateRegistry.1.0.PayloadApplyCompleted") == 0) {
+	if (g_pattern_match_simple("LenovoFirmwareUpdateRegistry.*.PayloadApplyCompleted",
+				   message_id)) {
 		fu_progress_set_status(ctx->progress, FWUPD_STATUS_IDLE);
 		return;
 	}
-	if (g_strcmp0(message_id, "LenovoFirmwareUpdateRegistry.1.0.UpdateVerifyInProgress") == 0) {
+	if (g_pattern_match_simple("LenovoFirmwareUpdateRegistry.*.UpdateVerifyInProgress",
+				   message_id)) {
 		fu_progress_set_status(ctx->progress, FWUPD_STATUS_DEVICE_VERIFY);
 		return;
 	}
-	if (g_strcmp0(message_id, "Update.1.1.TransferringToComponent") == 0) {
+	if (g_pattern_match_simple("Update.*.TransferringToComponent", message_id)) {
 		fu_progress_set_status(ctx->progress, FWUPD_STATUS_LOADING);
 		return;
 	}
-	if (g_strcmp0(message_id, "Update.1.1.VerifyingAtComponent") == 0) {
+	if (g_pattern_match_simple("Update.*.VerifyingAtComponent", message_id)) {
 		fu_progress_set_status(ctx->progress, FWUPD_STATUS_DEVICE_VERIFY);
 		return;
 	}
-	if (g_strcmp0(message_id, "Update.1.1.UpdateInProgress") == 0) {
+	if (g_pattern_match_simple("Update.*.UpdateInProgress", message_id)) {
 		fu_progress_set_status(ctx->progress, FWUPD_STATUS_DEVICE_WRITE);
 		return;
 	}
-	if (g_strcmp0(message_id, "Update.1.1.UpdateSuccessful") == 0) {
+	if (g_pattern_match_simple("Update.*.UpdateSuccessful", message_id)) {
 		fu_progress_set_status(ctx->progress, FWUPD_STATUS_IDLE);
 		return;
 	}
-	if (g_strcmp0(message_id, "Update.1.1.InstallingOnComponent") == 0) {
+	if (g_pattern_match_simple("Update.*.InstallingOnComponent", message_id)) {
 		fu_progress_set_status(ctx->progress, FWUPD_STATUS_DEVICE_WRITE);
 		return;
 	}
@@ -701,7 +718,7 @@ fu_redfish_device_poll_task_once(FuRedfishDevice *self, FuRedfishDevicePollCtx *
 		return TRUE;
 	}
 	if (g_strcmp0(state_tmp, "Cancelled") == 0) {
-		g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_CANCELLED, "Task was cancelled");
+		g_set_error_literal(error, FWUPD_ERROR, FWUPD_ERROR_INTERNAL, "Task was cancelled");
 		return FALSE;
 	}
 	if (g_strcmp0(state_tmp, "Exception") == 0 ||
@@ -793,13 +810,13 @@ fu_redfish_device_set_quirk_kv(FuDevice *device,
 	guint64 tmp = 0;
 
 	if (g_strcmp0(key, "RedfishResetPreDelay") == 0) {
-		if (!fu_strtoull(value, &tmp, 0, G_MAXUINT, error))
+		if (!fu_strtoull(value, &tmp, 0, G_MAXUINT, FU_INTEGER_BASE_AUTO, error))
 			return FALSE;
 		priv->reset_pre_delay = tmp;
 		return TRUE;
 	}
 	if (g_strcmp0(key, "RedfishResetPostDelay") == 0) {
-		if (!fu_strtoull(value, &tmp, 0, G_MAXUINT, error))
+		if (!fu_strtoull(value, &tmp, 0, G_MAXUINT, FU_INTEGER_BASE_AUTO, error))
 			return FALSE;
 		priv->reset_post_delay = tmp;
 		return TRUE;
@@ -830,6 +847,18 @@ fu_redfish_device_get_property(GObject *object, guint prop_id, GValue *value, GP
 }
 
 static void
+fu_redfish_device_set_member(FuRedfishDevice *self, JsonObject *member)
+{
+	FuRedfishDevicePrivate *priv = GET_PRIVATE(self);
+	if (priv->member != NULL) {
+		json_object_unref(priv->member);
+		priv->member = NULL;
+	}
+	if (member != NULL)
+		priv->member = json_object_ref(member);
+}
+
+static void
 fu_redfish_device_set_property(GObject *object,
 			       guint prop_id,
 			       const GValue *value,
@@ -842,7 +871,7 @@ fu_redfish_device_set_property(GObject *object,
 		g_set_object(&priv->backend, g_value_get_object(value));
 		break;
 	case PROP_MEMBER:
-		priv->member = json_object_ref(g_value_get_pointer(value));
+		fu_redfish_device_set_member(self, g_value_get_pointer(value));
 		break;
 	default:
 		G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
@@ -856,23 +885,17 @@ fu_redfish_device_init(FuRedfishDevice *self)
 	fu_device_set_summary(FU_DEVICE(self), "Redfish device");
 	fu_device_add_protocol(FU_DEVICE(self), "org.dmtf.redfish");
 	fu_device_add_flag(FU_DEVICE(self), FWUPD_DEVICE_FLAG_REQUIRE_AC);
-	fu_device_add_internal_flag(FU_DEVICE(self), FU_DEVICE_INTERNAL_FLAG_MD_SET_NAME);
-	fu_device_add_internal_flag(FU_DEVICE(self), FU_DEVICE_INTERNAL_FLAG_MD_SET_VERFMT);
-	fu_device_add_internal_flag(FU_DEVICE(self), FU_DEVICE_INTERNAL_FLAG_MD_SET_ICON);
-	fu_device_add_internal_flag(FU_DEVICE(self), FU_DEVICE_INTERNAL_FLAG_MD_SET_VENDOR);
-	fu_device_add_internal_flag(FU_DEVICE(self), FU_DEVICE_INTERNAL_FLAG_MD_SET_SIGNED);
+	fu_device_add_private_flag(FU_DEVICE(self), FU_DEVICE_PRIVATE_FLAG_MD_SET_NAME);
+	fu_device_add_private_flag(FU_DEVICE(self), FU_DEVICE_PRIVATE_FLAG_MD_SET_VERFMT);
+	fu_device_add_private_flag(FU_DEVICE(self), FU_DEVICE_PRIVATE_FLAG_MD_SET_ICON);
+	fu_device_add_private_flag(FU_DEVICE(self), FU_DEVICE_PRIVATE_FLAG_MD_SET_VENDOR);
+	fu_device_add_private_flag(FU_DEVICE(self), FU_DEVICE_PRIVATE_FLAG_MD_SET_SIGNED);
+	fu_device_register_private_flag(FU_DEVICE(self), FU_REDFISH_DEVICE_FLAG_IS_BACKUP);
+	fu_device_register_private_flag(FU_DEVICE(self), FU_REDFISH_DEVICE_FLAG_UNSIGNED_BUILD);
+	fu_device_register_private_flag(FU_DEVICE(self), FU_REDFISH_DEVICE_FLAG_WILDCARD_TARGETS);
+	fu_device_register_private_flag(FU_DEVICE(self), FU_REDFISH_DEVICE_FLAG_MANAGER_RESET);
 	fu_device_register_private_flag(FU_DEVICE(self),
-					FU_REDFISH_DEVICE_FLAG_IS_BACKUP,
-					"is-backup");
-	fu_device_register_private_flag(FU_DEVICE(self),
-					FU_REDFISH_DEVICE_FLAG_UNSIGNED_BUILD,
-					"unsigned-build");
-	fu_device_register_private_flag(FU_DEVICE(self),
-					FU_REDFISH_DEVICE_FLAG_WILDCARD_TARGETS,
-					"wildcard-targets");
-	fu_device_register_private_flag(FU_DEVICE(self),
-					FU_REDFISH_DEVICE_FLAG_MANAGER_RESET,
-					"manager-reset");
+					FU_REDFISH_DEVICE_FLAG_NO_MANAGER_RESET_REQUEST);
 }
 
 static void
@@ -893,15 +916,15 @@ fu_redfish_device_class_init(FuRedfishDeviceClass *klass)
 {
 	GObjectClass *object_class = G_OBJECT_CLASS(klass);
 	GParamSpec *pspec;
-	FuDeviceClass *klass_device = FU_DEVICE_CLASS(klass);
+	FuDeviceClass *device_class = FU_DEVICE_CLASS(klass);
 
 	object_class->get_property = fu_redfish_device_get_property;
 	object_class->set_property = fu_redfish_device_set_property;
 	object_class->finalize = fu_redfish_device_finalize;
 
-	klass_device->to_string = fu_redfish_device_to_string;
-	klass_device->probe = fu_redfish_device_probe;
-	klass_device->set_quirk_kv = fu_redfish_device_set_quirk_kv;
+	device_class->to_string = fu_redfish_device_to_string;
+	device_class->probe = fu_redfish_device_probe;
+	device_class->set_quirk_kv = fu_redfish_device_set_quirk_kv;
 
 	/**
 	 * FuRedfishDevice:backend:

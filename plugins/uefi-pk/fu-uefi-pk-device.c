@@ -1,12 +1,10 @@
 /*
- * Copyright (C) 2020 Richard Hughes <richard@hughsie.com>
+ * Copyright 2020 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #include "config.h"
-
-#include <fwupdplugin.h>
 
 #include <gnutls/abstract.h>
 #include <gnutls/crypto.h>
@@ -24,13 +22,13 @@ static void
 fu_uefi_pk_device_to_string(FuDevice *device, guint idt, GString *str)
 {
 	FuUefiPkDevice *self = FU_UEFI_PK_DEVICE(device);
-	fu_string_append_kb(str, idt, "HasPkTestKey", self->has_pk_test_key);
+	fwupd_codec_string_append_bool(str, idt, "HasPkTestKey", self->has_pk_test_key);
 }
 
 #define FU_UEFI_PK_CHECKSUM_AMI_TEST_KEY "a773113bafaf5129aa83fd0912e95da4fa555f91"
 
 static void
-_gnutls_datum_deinit(gnutls_datum_t *d)
+fu_uefi_pk_device_gnutls_datum_deinit(gnutls_datum_t *d)
 {
 	gnutls_free(d->data);
 	gnutls_free(d);
@@ -38,7 +36,7 @@ _gnutls_datum_deinit(gnutls_datum_t *d)
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-function"
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(gnutls_datum_t, _gnutls_datum_deinit)
+G_DEFINE_AUTOPTR_CLEANUP_FUNC(gnutls_datum_t, fu_uefi_pk_device_gnutls_datum_deinit)
 G_DEFINE_AUTO_CLEANUP_FREE_FUNC(gnutls_x509_crt_t, gnutls_x509_crt_deinit, NULL)
 #pragma clang diagnostic pop
 
@@ -97,8 +95,8 @@ fu_uefi_pk_device_parse_signature(FuUefiPkDevice *self, FuEfiSignature *sig, GEr
 	rc = gnutls_x509_crt_init(&crt);
 	if (rc < 0) {
 		g_set_error(error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_INVALID_DATA,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_INVALID_DATA,
 			    "crt_init: %s [%i]",
 			    gnutls_strerror(rc),
 			    rc);
@@ -114,8 +112,8 @@ fu_uefi_pk_device_parse_signature(FuUefiPkDevice *self, FuEfiSignature *sig, GEr
 	rc = gnutls_x509_crt_import(crt, &d, GNUTLS_X509_FMT_DER);
 	if (rc < 0) {
 		g_set_error(error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_INVALID_DATA,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_INVALID_DATA,
 			    "crt_import: %s [%i]",
 			    gnutls_strerror(rc),
 			    rc);
@@ -145,8 +143,8 @@ fu_uefi_pk_device_parse_signature(FuUefiPkDevice *self, FuEfiSignature *sig, GEr
 	rc = gnutls_x509_crt_get_key_id(crt, 0, key_id, &key_idsz);
 	if (rc < 0) {
 		g_set_error(error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_INVALID_DATA,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_INVALID_DATA,
 			    "failed to get key ID: %s [%i]",
 			    gnutls_strerror(rc),
 			    rc);
@@ -155,8 +153,8 @@ fu_uefi_pk_device_parse_signature(FuUefiPkDevice *self, FuEfiSignature *sig, GEr
 	key_idstr = g_compute_checksum_for_data(G_CHECKSUM_SHA1, key_id, key_idsz);
 	if (key_idstr == NULL) {
 		g_set_error(error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_INVALID_DATA,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_INVALID_DATA,
 			    "failed to calculate key ID for 0x%x bytes",
 			    (guint)key_idsz);
 		return FALSE;
@@ -170,16 +168,18 @@ fu_uefi_pk_device_parse_signature(FuUefiPkDevice *self, FuEfiSignature *sig, GEr
 static gboolean
 fu_uefi_pk_device_probe(FuDevice *device, GError **error)
 {
+	FuContext *ctx = fu_device_get_context(device);
+	FuEfivars *efivars = fu_context_get_efivars(ctx);
 	FuUefiPkDevice *self = FU_UEFI_PK_DEVICE(device);
 	g_autoptr(FuFirmware) img = NULL;
 	g_autoptr(FuFirmware) pk = fu_efi_signature_list_new();
 	g_autoptr(GBytes) pk_blob = NULL;
 	g_autoptr(GPtrArray) sigs = NULL;
 
-	pk_blob = fu_efivar_get_data_bytes(FU_EFIVAR_GUID_EFI_GLOBAL, "PK", NULL, error);
+	pk_blob = fu_efivars_get_data_bytes(efivars, FU_EFIVARS_GUID_EFI_GLOBAL, "PK", NULL, error);
 	if (pk_blob == NULL)
 		return FALSE;
-	if (!fu_firmware_parse(pk, pk_blob, FU_FIRMWARE_FLAG_NONE, error)) {
+	if (!fu_firmware_parse_bytes(pk, pk_blob, 0x0, FWUPD_INSTALL_FLAG_NONE, error)) {
 		g_prefix_error(error, "failed to parse PK: ");
 		return FALSE;
 	}
@@ -209,6 +209,7 @@ fu_uefi_pk_device_add_security_attrs(FuDevice *device, FuSecurityAttrs *attrs)
 
 	/* create attr */
 	attr = fu_device_security_attr_new(device, FWUPD_SECURITY_ATTR_ID_UEFI_PK);
+	fwupd_security_attr_set_result_success(attr, FWUPD_SECURITY_ATTR_RESULT_VALID);
 	fu_security_attrs_append(attrs, attr);
 
 	/* test key is not secure */
@@ -221,7 +222,6 @@ fu_uefi_pk_device_add_security_attrs(FuDevice *device, FuSecurityAttrs *attrs)
 
 	/* success */
 	fwupd_security_attr_add_flag(attr, FWUPD_SECURITY_ATTR_FLAG_SUCCESS);
-	fwupd_security_attr_set_result(attr, FWUPD_SECURITY_ATTR_RESULT_VALID);
 }
 
 static void
@@ -235,10 +235,10 @@ fu_uefi_pk_device_init(FuUefiPkDevice *self)
 static void
 fu_uefi_pk_device_class_init(FuUefiPkDeviceClass *klass)
 {
-	FuDeviceClass *klass_device = FU_DEVICE_CLASS(klass);
-	klass_device->to_string = fu_uefi_pk_device_to_string;
-	klass_device->add_security_attrs = fu_uefi_pk_device_add_security_attrs;
-	klass_device->probe = fu_uefi_pk_device_probe;
+	FuDeviceClass *device_class = FU_DEVICE_CLASS(klass);
+	device_class->to_string = fu_uefi_pk_device_to_string;
+	device_class->add_security_attrs = fu_uefi_pk_device_add_security_attrs;
+	device_class->probe = fu_uefi_pk_device_probe;
 }
 
 FuUefiPkDevice *

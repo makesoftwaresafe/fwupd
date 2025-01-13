@@ -7,7 +7,8 @@ title: Plugin: SCSI
 This plugin adds support for SCSI storage hardware. Most SCSI devices are enumerated and some UFS
 devices may also be updatable.
 
-Firmware is sent in 4kB chunks and activated on next reboot only.
+Firmware is sent in chunks of 4kB by default and activated on next reboot only.
+There is a quirk to change the chunk size for specific device.
 
 ## Firmware Format
 
@@ -24,7 +25,6 @@ These device use the SCSI DeviceInstanceId values, e.g.
 
 * `SCSI\VEN_HP&DEV_EG0900JETKB&REV_HPD4`
 * `SCSI\VEN_HP&DEV_EG0900JETKB`
-* `SCSI\VEN_HP`
 
 ## Vendor ID Security
 
@@ -38,3 +38,12 @@ for UFS updates.
 ## Version Considerations
 
 This plugin has been available since fwupd version `1.7.6`.
+
+## Quirk Use
+
+This plugin uses the following plugin-specific quirks:
+
+### ScsiWriteBufferSize
+
+The block size used for WRITE_BUFFER commands to update the firmware.
+Must be a multiple of 4k.

@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2018 Richard Hughes <richard@hughsie.com>
+ * Copyright 2018 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #pragma once
@@ -23,3 +23,7 @@ fu_wac_device_set_feature_report(FuWacDevice *self,
 				 gsize bufsz,
 				 FuHidDeviceFlags flags,
 				 GError **error);
+gboolean
+fu_wac_device_switch_to_flash_loader(FuWacDevice *self, GError **error);
+gboolean
+fu_wac_device_update_reset(FuWacDevice *self, GError **error);

@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2017 Richard Hughes <richard@hughsie.com>
+ * Copyright 2017 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #define G_LOG_DOMAIN "FuCommon"
@@ -32,6 +32,8 @@ fu_dump_full(const gchar *log_domain,
 	     FuDumpFlags flags)
 {
 	g_autoptr(GString) str = g_string_new(NULL);
+
+	g_return_if_fail(columns > 0);
 
 	/* this is CPU intensive enough to pre-filter here rather than building
 	 * the string and handling in a GLogFunc */

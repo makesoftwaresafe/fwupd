@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2020 Richard Hughes <richard@hughsie.com>
+ * Copyright 2020 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #pragma once
@@ -9,4 +9,7 @@
 #include <fwupdplugin.h>
 
 gboolean
-fu_uefi_dbx_signature_list_validate(FuContext *ctx, FuEfiSignatureList *siglist, GError **error);
+fu_uefi_dbx_signature_list_validate(FuContext *ctx,
+				    FuEfiSignatureList *siglist,
+				    FwupdInstallFlags flags,
+				    GError **error);

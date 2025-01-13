@@ -1,13 +1,11 @@
 /*
- * Copyright (C) 2020 Cypress Semiconductor Corporation.
- * Copyright (C) 2020 Richard Hughes <richard@hughsie.com>
+ * Copyright 2020 Cypress Semiconductor Corporation.
+ * Copyright 2020 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #include "config.h"
-
-#include <fwupdplugin.h>
 
 #include <string.h>
 
@@ -124,7 +122,7 @@ fu_ccgx_firmware_add_record(FuCcgxFirmware *self,
 		fu_byte_array_append_uint8(data, tmp);
 		checksum_calc += tmp;
 	}
-	rcd->data = g_byte_array_free_to_bytes(g_steal_pointer(&data));
+	rcd->data = g_bytes_new(data->data, data->len);
 
 	/* verify 2s complement checksum */
 	if ((flags & FWUPD_INSTALL_FLAG_IGNORE_CHECKSUM) == 0) {
@@ -166,14 +164,13 @@ static gboolean
 fu_ccgx_firmware_parse_md_block(FuCcgxFirmware *self, FwupdInstallFlags flags, GError **error)
 {
 	FuCcgxFirmwareRecord *rcd;
-	CCGxMetaData metadata;
-	const guint8 *buf;
 	gsize bufsz = 0;
 	gsize md_offset = 0;
 	guint32 fw_size = 0;
 	guint32 rcd_version_idx = 0;
 	guint32 version = 0;
 	guint8 checksum_calc = 0;
+	g_autoptr(GByteArray) st_metadata = NULL;
 
 	/* sanity check */
 	if (self->records->len == 0) {
@@ -186,7 +183,7 @@ fu_ccgx_firmware_parse_md_block(FuCcgxFirmware *self, FwupdInstallFlags flags, G
 
 	/* read metadata from correct offset */
 	rcd = g_ptr_array_index(self->records, self->records->len - 1);
-	buf = g_bytes_get_data(rcd->data, &bufsz);
+	bufsz = g_bytes_get_size(rcd->data);
 	if (bufsz == 0) {
 		g_set_error_literal(error,
 				    FWUPD_ERROR,
@@ -204,25 +201,20 @@ fu_ccgx_firmware_parse_md_block(FuCcgxFirmware *self, FwupdInstallFlags flags, G
 	default:
 		break;
 	}
-	if (!fu_memcpy_safe((guint8 *)&metadata,
-			    sizeof(metadata),
-			    0x0, /* dst */
-			    buf,
-			    bufsz,
-			    md_offset,
-			    sizeof(metadata),
-			    error)) /* src */
-		return FALSE;
 
-	/* sanity check */
-	if (metadata.metadata_valid != CCGX_METADATA_VALID_SIG) {
+	/* parse */
+	st_metadata = fu_struct_ccgx_metadata_hdr_parse_bytes(rcd->data, md_offset, error);
+	if (st_metadata == NULL)
+		return FALSE;
+	if (fu_struct_ccgx_metadata_hdr_get_metadata_valid(st_metadata) !=
+	    FU_STRUCT_CCGX_METADATA_HDR_DEFAULT_METADATA_VALID) {
 		g_set_error(error,
 			    FWUPD_ERROR,
 			    FWUPD_ERROR_NOT_SUPPORTED,
 			    "invalid metadata 0x@%x, expected 0x%04x, got 0x%04x",
 			    (guint)md_offset,
-			    (guint)CCGX_METADATA_VALID_SIG,
-			    (guint)metadata.metadata_valid);
+			    (guint)FU_STRUCT_CCGX_METADATA_HDR_DEFAULT_METADATA_VALID,
+			    (guint)fu_struct_ccgx_metadata_hdr_get_metadata_valid(st_metadata));
 		return FALSE;
 	}
 	for (guint i = 0; i < self->records->len - 1; i++) {
@@ -230,24 +222,24 @@ fu_ccgx_firmware_parse_md_block(FuCcgxFirmware *self, FwupdInstallFlags flags, G
 		checksum_calc += fu_sum8_bytes(rcd->data);
 		fw_size += g_bytes_get_size(rcd->data);
 	}
-	if (fw_size != metadata.fw_size) {
+	if (fw_size != fu_struct_ccgx_metadata_hdr_get_fw_size(st_metadata)) {
 		g_set_error(error,
 			    FWUPD_ERROR,
 			    FWUPD_ERROR_INVALID_FILE,
 			    "firmware size invalid, got %02x, expected %02x",
 			    fw_size,
-			    metadata.fw_size);
+			    fu_struct_ccgx_metadata_hdr_get_fw_size(st_metadata));
 		return FALSE;
 	}
 	checksum_calc = 1 + ~checksum_calc;
 	if ((flags & FWUPD_INSTALL_FLAG_IGNORE_CHECKSUM) == 0) {
-		if (metadata.fw_checksum != checksum_calc) {
+		if (fu_struct_ccgx_metadata_hdr_get_fw_checksum(st_metadata) != checksum_calc) {
 			g_set_error(error,
 				    FWUPD_ERROR,
 				    FWUPD_ERROR_INVALID_FILE,
 				    "checksum invalid, got %02x, expected %02x",
 				    checksum_calc,
-				    metadata.fw_checksum);
+				    fu_struct_ccgx_metadata_hdr_get_fw_checksum(st_metadata));
 			return FALSE;
 		}
 	}
@@ -255,7 +247,7 @@ fu_ccgx_firmware_parse_md_block(FuCcgxFirmware *self, FwupdInstallFlags flags, G
 	/* get version if enough data */
 	rcd_version_idx = CCGX_APP_VERSION_OFFSET / bufsz;
 	if (rcd_version_idx < self->records->len) {
-		g_autofree gchar *version_str = NULL;
+		const guint8 *buf;
 		rcd = g_ptr_array_index(self->records, rcd_version_idx);
 		buf = g_bytes_get_data(rcd->data, &bufsz);
 		if (bufsz == 0) {
@@ -273,8 +265,6 @@ fu_ccgx_firmware_parse_md_block(FuCcgxFirmware *self, FwupdInstallFlags flags, G
 					    error))
 			return FALSE;
 		self->app_type = version & 0xffff;
-		version_str = fu_ccgx_version_to_string(version);
-		fu_firmware_set_version(FU_FIRMWARE(self), version_str);
 		fu_firmware_set_version_raw(FU_FIRMWARE(self), version);
 	}
 
@@ -303,8 +293,8 @@ fu_ccgx_firmware_tokenize_cb(GString *token, guint token_idx, gpointer user_data
 	/* sanity check */
 	if (token_idx > FU_CCGX_FIRMWARE_TOKENS_MAX) {
 		g_set_error_literal(error,
-				    G_IO_ERROR,
-				    G_IO_ERROR_INVALID_DATA,
+				    FWUPD_ERROR,
+				    FWUPD_ERROR_INVALID_DATA,
 				    "file has too many lines");
 		return FALSE;
 	}
@@ -354,8 +344,7 @@ fu_ccgx_firmware_tokenize_cb(GString *token, guint token_idx, gpointer user_data
 
 static gboolean
 fu_ccgx_firmware_parse(FuFirmware *firmware,
-		       GBytes *fw,
-		       gsize offset,
+		       GInputStream *stream,
 		       FwupdInstallFlags flags,
 		       GError **error)
 {
@@ -363,12 +352,7 @@ fu_ccgx_firmware_parse(FuFirmware *firmware,
 	FuCcgxFirmwareTokenHelper helper = {.self = self, .flags = flags};
 
 	/* tokenize */
-	if (!fu_strsplit_full(g_bytes_get_data(fw, NULL),
-			      g_bytes_get_size(fw),
-			      "\n",
-			      fu_ccgx_firmware_tokenize_cb,
-			      &helper,
-			      error))
+	if (!fu_strsplit_stream(stream, 0x0, "\n", fu_ccgx_firmware_tokenize_cb, &helper, error))
 		return FALSE;
 
 	/* address is first data entry */
@@ -417,17 +401,18 @@ fu_ccgx_firmware_write_record(GString *str,
 			       (guint)((guint8)~checksum_calc));
 }
 
-static GBytes *
+static GByteArray *
 fu_ccgx_firmware_write(FuFirmware *firmware, GError **error)
 {
 	FuCcgxFirmware *self = FU_CCGX_FIRMWARE(firmware);
-	CCGxMetaData metadata = {0x0};
 	gsize fwbufsz = 0;
 	guint8 checksum_img = 0xff;
 	const guint8 *fwbuf;
+	g_autoptr(GByteArray) buf = g_byte_array_new();
 	g_autoptr(GByteArray) mdbuf = g_byte_array_new();
+	g_autoptr(GByteArray) st_metadata = fu_struct_ccgx_metadata_hdr_new();
 	g_autoptr(GBytes) fw = NULL;
-	g_autoptr(GPtrArray) chunks = NULL;
+	g_autoptr(FuChunkArray) chunks = NULL;
 	g_autoptr(GString) str = g_string_new(NULL);
 
 	/* header record */
@@ -442,9 +427,17 @@ fu_ccgx_firmware_write(FuFirmware *firmware, GError **error)
 	fw = fu_firmware_get_bytes_with_patches(firmware, error);
 	if (fw == NULL)
 		return NULL;
-	chunks = fu_chunk_array_new_from_bytes(fw, 0x0, 0x0, 0x100);
-	for (guint i = 0; i < chunks->len; i++) {
-		FuChunk *chk = g_ptr_array_index(chunks, i);
+	chunks = fu_chunk_array_new_from_bytes(fw,
+					       FU_CHUNK_ADDR_OFFSET_NONE,
+					       FU_CHUNK_PAGESZ_NONE,
+					       0x100);
+	for (guint i = 0; i < fu_chunk_array_length(chunks); i++) {
+		g_autoptr(FuChunk) chk = NULL;
+
+		/* prepare chunk */
+		chk = fu_chunk_array_index(chunks, i, error);
+		if (chk == NULL)
+			return NULL;
 		fu_ccgx_firmware_write_record(str,
 					      0x0,
 					      i,
@@ -456,22 +449,21 @@ fu_ccgx_firmware_write(FuFirmware *firmware, GError **error)
 	fwbuf = g_bytes_get_data(fw, &fwbufsz);
 	for (guint j = 0; j < fwbufsz; j++)
 		checksum_img += fwbuf[j];
-	metadata.fw_checksum = ~checksum_img;
-	metadata.fw_entry = 0x0; /* unknown */
-	metadata.last_boot_row = 0x13;
-	metadata.fw_size = fwbufsz;
-	metadata.metadata_valid = CCGX_METADATA_VALID_SIG;
-	metadata.boot_seq = 0x0; /* unknown */
 
 	/* copy into place */
 	fu_byte_array_set_size(mdbuf, 0x80, 0x00);
+	fu_struct_ccgx_metadata_hdr_set_fw_checksum(st_metadata, ~checksum_img);
+	fu_struct_ccgx_metadata_hdr_set_fw_entry(st_metadata, 0x0); /* unknown */
+	fu_struct_ccgx_metadata_hdr_set_last_boot_row(st_metadata, 0x13);
+	fu_struct_ccgx_metadata_hdr_set_fw_size(st_metadata, fwbufsz);
+	fu_struct_ccgx_metadata_hdr_set_boot_seq(st_metadata, 0x0); /* unknown */
 	if (!fu_memcpy_safe(mdbuf->data,
 			    mdbuf->len,
 			    0x40, /* dst */
-			    (const guint8 *)&metadata,
-			    sizeof(metadata),
+			    st_metadata->data,
+			    st_metadata->len,
 			    0x0, /* src */
-			    sizeof(metadata),
+			    st_metadata->len,
 			    error))
 		return NULL;
 	fu_ccgx_firmware_write_record(str,
@@ -480,7 +472,9 @@ fu_ccgx_firmware_write(FuFirmware *firmware, GError **error)
 				      mdbuf->data,
 				      mdbuf->len);
 
-	return g_string_free_to_bytes(g_steal_pointer(&str));
+	/* success */
+	g_byte_array_append(buf, (const guint8 *)str->str, str->len);
+	return g_steal_pointer(&buf);
 }
 
 static gboolean
@@ -498,12 +492,19 @@ fu_ccgx_firmware_build(FuFirmware *firmware, XbNode *n, GError **error)
 	return TRUE;
 }
 
+static gchar *
+fu_ccgx_firmware_convert_version(FuFirmware *firmware, guint64 version_raw)
+{
+	return fu_ccgx_version_to_string(version_raw);
+}
+
 static void
 fu_ccgx_firmware_init(FuCcgxFirmware *self)
 {
 	self->records = g_ptr_array_new_with_free_func((GFreeFunc)fu_ccgx_firmware_record_free);
 	fu_firmware_add_flag(FU_FIRMWARE(self), FU_FIRMWARE_FLAG_HAS_CHECKSUM);
 	fu_firmware_add_flag(FU_FIRMWARE(self), FU_FIRMWARE_FLAG_HAS_VID_PID);
+	fu_firmware_set_version_format(FU_FIRMWARE(self), FWUPD_VERSION_FORMAT_TRIPLET);
 }
 
 static void
@@ -518,12 +519,13 @@ static void
 fu_ccgx_firmware_class_init(FuCcgxFirmwareClass *klass)
 {
 	GObjectClass *object_class = G_OBJECT_CLASS(klass);
-	FuFirmwareClass *klass_firmware = FU_FIRMWARE_CLASS(klass);
+	FuFirmwareClass *firmware_class = FU_FIRMWARE_CLASS(klass);
+	firmware_class->convert_version = fu_ccgx_firmware_convert_version;
 	object_class->finalize = fu_ccgx_firmware_finalize;
-	klass_firmware->parse = fu_ccgx_firmware_parse;
-	klass_firmware->write = fu_ccgx_firmware_write;
-	klass_firmware->build = fu_ccgx_firmware_build;
-	klass_firmware->export = fu_ccgx_firmware_export;
+	firmware_class->parse = fu_ccgx_firmware_parse;
+	firmware_class->write = fu_ccgx_firmware_write;
+	firmware_class->build = fu_ccgx_firmware_build;
+	firmware_class->export = fu_ccgx_firmware_export;
 }
 
 FuFirmware *

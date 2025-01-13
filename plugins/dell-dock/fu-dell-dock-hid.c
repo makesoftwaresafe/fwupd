@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2018 Realtek Semiconductor Corporation
- * Copyright (C) 2018 Dell Inc.
+ * Copyright 2018 Realtek Semiconductor Corporation
+ * Copyright 2018 Dell Inc.
  * All rights reserved.
  *
  * This software and associated documentation (if any) is furnished
@@ -11,12 +11,10 @@
  * redistributing this file, you may do so under either license.
  * Dell Chooses the MIT license part of Dual MIT/LGPLv2 license agreement.
  *
- * SPDX-License-Identifier: LGPL-2.1+ OR MIT
+ * SPDX-License-Identifier: LGPL-2.1-or-later OR MIT
  */
 
 #include "config.h"
-
-#include <fwupdplugin.h>
 
 #include <errno.h>
 #include <string.h>
@@ -43,7 +41,7 @@
 #define TBT_COMMAND_AUTHENTICATE	0xFFFFFFFF
 #define TBT_COMMAND_AUTHENTICATE_STATUS 0xFFFFFFFE
 
-typedef struct __attribute__((packed)) {
+typedef struct __attribute__((packed)) { /* nocheck:blocked */
 	guint8 cmd;
 	guint8 ext;
 	union {
@@ -61,7 +59,7 @@ typedef struct __attribute__((packed)) {
 	guint8 data[192];
 } FuHIDCmdBuffer;
 
-typedef struct __attribute__((packed)) {
+typedef struct __attribute__((packed)) { /* nocheck:blocked */
 	guint8 cmd;
 	guint8 ext;
 	guint8 i2ctargetaddr;
@@ -132,7 +130,7 @@ fu_dell_dock_hid_get_hub_version(FuDevice *self, GError **error)
 	    .cmd_data1 = 0,
 	    .cmd_data2 = 0,
 	    .cmd_data3 = 0,
-	    .bufferlen = GUINT16_TO_LE(12),
+	    .bufferlen = GUINT16_TO_LE(12), /* nocheck:blocked */
 	    .parameters = {.i2ctargetaddr = 0, .regaddrlen = 0, .i2cspeed = 0},
 	    .extended_cmdarea[0 ... 52] = 0,
 	};
@@ -208,15 +206,15 @@ fu_dell_dock_hid_write_flash(FuDevice *self,
 	FuHIDCmdBuffer cmd_buffer = {
 	    .cmd = HUB_CMD_WRITE_DATA,
 	    .ext = HUB_EXT_WRITEFLASH,
-	    .dwregaddr = GUINT32_TO_LE(dwAddr),
-	    .bufferlen = GUINT16_TO_LE(write_size),
+	    .dwregaddr = GUINT32_TO_LE(dwAddr),	    /* nocheck:blocked */
+	    .bufferlen = GUINT16_TO_LE(write_size), /* nocheck:blocked */
 	    .parameters = {.i2ctargetaddr = 0, .regaddrlen = 0, .i2cspeed = 0},
 	    .extended_cmdarea[0 ... 52] = 0,
 	};
 
 	g_return_val_if_fail(write_size <= HIDI2C_MAX_WRITE, FALSE);
 
-	memcpy(cmd_buffer.data, input, write_size);
+	memcpy(cmd_buffer.data, input, write_size); /* nocheck:blocked */
 	if (!fu_dell_dock_hid_set_report(self, (guint8 *)&cmd_buffer, error)) {
 		g_prefix_error(error,
 			       "failed to write %" G_GSIZE_FORMAT " flash to %x: ",
@@ -238,7 +236,7 @@ fu_dell_dock_hid_verify_update(FuDevice *self, gboolean *result, GError **error)
 	    .cmd_data1 = 0,
 	    .cmd_data2 = 0,
 	    .cmd_data3 = 0,
-	    .bufferlen = GUINT16_TO_LE(1),
+	    .bufferlen = GUINT16_TO_LE(1), /* nocheck:blocked */
 	    .parameters = {.i2ctargetaddr = 0, .regaddrlen = 0, .i2cspeed = 0},
 	    .extended_cmdarea[0 ... 52] = 0,
 	};
@@ -267,7 +265,7 @@ fu_dell_dock_hid_i2c_write(FuDevice *self,
 	    .cmd = HUB_CMD_WRITE_DATA,
 	    .ext = HUB_EXT_I2C_WRITE,
 	    .dwregaddr = 0,
-	    .bufferlen = GUINT16_TO_LE(write_size),
+	    .bufferlen = GUINT16_TO_LE(write_size), /* nocheck:blocked */
 	    .parameters = {.i2ctargetaddr = parameters->i2ctargetaddr,
 			   .regaddrlen = 0,
 			   .i2cspeed = parameters->i2cspeed | 0x80},
@@ -276,7 +274,7 @@ fu_dell_dock_hid_i2c_write(FuDevice *self,
 
 	g_return_val_if_fail(write_size <= HIDI2C_MAX_WRITE, FALSE);
 
-	memcpy(cmd_buffer.data, input, write_size);
+	memcpy(cmd_buffer.data, input, write_size); /* nocheck:blocked */
 
 	return fu_dell_dock_hid_set_report(self, (guint8 *)&cmd_buffer, error);
 }
@@ -292,8 +290,8 @@ fu_dell_dock_hid_i2c_read(FuDevice *self,
 	FuHIDCmdBuffer cmd_buffer = {
 	    .cmd = HUB_CMD_WRITE_DATA,
 	    .ext = HUB_EXT_I2C_READ,
-	    .dwregaddr = GUINT32_TO_LE(cmd),
-	    .bufferlen = GUINT16_TO_LE(read_size),
+	    .dwregaddr = GUINT32_TO_LE(cmd),	   /* nocheck:blocked */
+	    .bufferlen = GUINT16_TO_LE(read_size), /* nocheck:blocked */
 	    .parameters = {.i2ctargetaddr = parameters->i2ctargetaddr,
 			   .regaddrlen = parameters->regaddrlen,
 			   .i2cspeed = parameters->i2cspeed | 0x80},
@@ -366,7 +364,7 @@ fu_dell_dock_hid_tbt_write(FuDevice *self,
 	    .ext = HUB_EXT_WRITE_TBT_FLASH,
 	    .i2ctargetaddr = parameters->i2ctargetaddr,
 	    .i2cspeed = parameters->i2cspeed, /* unlike other commands doesn't need | 0x80 */
-	    .startaddress = GUINT32_TO_LE(start_addr),
+	    .startaddress = GUINT32_TO_LE(start_addr), /* nocheck:blocked */
 	    .bufferlen = write_size,
 	    .extended_cmdarea[0 ... 53] = 0,
 	};
@@ -375,7 +373,7 @@ fu_dell_dock_hid_tbt_write(FuDevice *self,
 	g_return_val_if_fail(input != NULL, FALSE);
 	g_return_val_if_fail(write_size <= HIDI2C_MAX_WRITE, FALSE);
 
-	memcpy(cmd_buffer.data, input, write_size);
+	memcpy(cmd_buffer.data, input, write_size); /* nocheck:blocked */
 
 	for (gint i = 1; i <= TBT_MAX_RETRIES; i++) {
 		if (!fu_dell_dock_hid_set_report(self, (guint8 *)&cmd_buffer, error)) {
@@ -414,7 +412,7 @@ fu_dell_dock_hid_tbt_authenticate(FuDevice *self,
 	    .ext = HUB_EXT_WRITE_TBT_FLASH,
 	    .i2ctargetaddr = parameters->i2ctargetaddr,
 	    .i2cspeed = parameters->i2cspeed, /* unlike other commands doesn't need | 0x80 */
-	    .tbt_command = GUINT32_TO_LE(TBT_COMMAND_AUTHENTICATE),
+	    .tbt_command = GUINT32_TO_LE(TBT_COMMAND_AUTHENTICATE), /* nocheck:blocked */
 	    .bufferlen = 0,
 	    .extended_cmdarea[0 ... 53] = 0,
 	};
@@ -425,7 +423,8 @@ fu_dell_dock_hid_tbt_authenticate(FuDevice *self,
 		return FALSE;
 	}
 
-	cmd_buffer.tbt_command = GUINT32_TO_LE(TBT_COMMAND_AUTHENTICATE_STATUS);
+	cmd_buffer.tbt_command =
+	    GUINT32_TO_LE(TBT_COMMAND_AUTHENTICATE_STATUS); /* nocheck:blocked */
 	/* needs at least 2 seconds */
 	fu_device_sleep(self, 2000);
 	for (gint i = 1; i <= TBT_MAX_RETRIES; i++) {
@@ -448,9 +447,9 @@ fu_dell_dock_hid_tbt_authenticate(FuDevice *self,
 	}
 	if (result != 0) {
 		g_set_error(error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_FAILED,
-			    "Thunderbolt authentication failed: %s",
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_AUTH_FAILED,
+			    "thunderbolt authentication failed: %s",
 			    fu_dell_dock_hid_tbt_map_error(result));
 		return FALSE;
 	}

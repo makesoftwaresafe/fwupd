@@ -1,14 +1,13 @@
 /*
- * Copyright (C) 2020 Aleksander Morgado <aleksander@aleksander.es>
- * Copyright (C) 2021 Ivan Mikhanchuk <ivan.mikhanchuk@quectel.com>
+ * Copyright 2020 Aleksander Morgado <aleksander@aleksander.es>
+ * Copyright 2021 Ivan Mikhanchuk <ivan.mikhanchuk@quectel.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #include "config.h"
 
 #include <string.h>
-#include <sys/ioctl.h>
 
 #include "fu-firehose-updater.h"
 
@@ -46,7 +45,6 @@
 #define CONFIGURE_ALWAYS_VALIDATE		      0
 #define CONFIGURE_MAX_DIGEST_TABLE_SIZE_IN_BYTES      2048
 #define CONFIGURE_MAX_PAYLOAD_SIZE_TO_TARGET_IN_BYTES 8192
-#define CONFIGURE_ZLP_AWARE_HOST		      1
 #define CONFIGURE_SKIP_STORAGE_INIT		      0
 
 struct _FuFirehoseUpdater {
@@ -54,6 +52,7 @@ struct _FuFirehoseUpdater {
 	gchar *port;
 	FuSaharaLoader *sahara;
 	FuIOChannel *io_channel;
+	gboolean supports_zlp;
 };
 
 G_DEFINE_TYPE(FuFirehoseUpdater, fu_firehose_updater, G_TYPE_OBJECT)
@@ -74,22 +73,25 @@ fu_firehose_updater_log_message(const gchar *action, GBytes *msg)
 }
 
 static GBytes *
-fu_firehose_read(FuFirehoseUpdater *self, guint timeout_ms, FuIOChannelFlags flags, GError **error)
+fu_firehose_updater_read(FuFirehoseUpdater *self,
+			 guint timeout_ms,
+			 FuIOChannelFlags flags,
+			 GError **error)
 {
 	if (self->sahara != NULL) {
 		GByteArray *bytearr = fu_sahara_loader_qdl_read(self->sahara, error);
-		return bytearr == NULL ? NULL : g_byte_array_free_to_bytes(bytearr);
+		return bytearr == NULL ? NULL : g_bytes_new(bytearr->data, bytearr->len);
 	}
 
 	return fu_io_channel_read_bytes(self->io_channel, -1, timeout_ms, flags, error);
 }
 
 static gboolean
-fu_firehose_write(FuFirehoseUpdater *self,
-		  GBytes *bytes,
-		  guint timeout_ms,
-		  FuIOChannelFlags flags,
-		  GError **error)
+fu_firehose_updater_write_internal(FuFirehoseUpdater *self,
+				   GBytes *bytes,
+				   guint timeout_ms,
+				   FuIOChannelFlags flags,
+				   GError **error)
 {
 	if (self->sahara != NULL)
 		return fu_sahara_loader_qdl_write_bytes(self->sahara, bytes, error);
@@ -98,21 +100,21 @@ fu_firehose_write(FuFirehoseUpdater *self,
 }
 
 static gboolean
-validate_program_action(XbNode *program, FuArchive *archive, GError **error)
+fu_firehose_updater_validate_program_action(XbNode *program, FuArchive *archive, GError **error)
 {
 	const gchar *filename_attr;
-	GBytes *file;
 	gsize file_size;
 	guint64 computed_num_partition_sectors;
 	guint64 num_partition_sectors;
 	guint64 sector_size_in_bytes;
+	g_autoptr(GBytes) file = NULL;
 
 	filename_attr = xb_node_get_attr(program, "filename");
 	if (filename_attr == NULL) {
 		g_set_error(error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_FAILED,
-			    "Missing 'filename' attribute in 'program' action");
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_NOT_SUPPORTED,
+			    "missing 'filename' attribute in 'program' action");
 		return FALSE;
 	}
 
@@ -127,9 +129,9 @@ validate_program_action(XbNode *program, FuArchive *archive, GError **error)
 	num_partition_sectors = xb_node_get_attr_as_uint(program, "num_partition_sectors");
 	if (num_partition_sectors == G_MAXUINT64) {
 		g_set_error(error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_FAILED,
-			    "Missing 'num_partition_sectors' attribute in 'program' action for "
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_NOT_SUPPORTED,
+			    "missing 'num_partition_sectors' attribute in 'program' action for "
 			    "filename '%s'",
 			    filename_attr);
 		return FALSE;
@@ -137,9 +139,9 @@ validate_program_action(XbNode *program, FuArchive *archive, GError **error)
 	sector_size_in_bytes = xb_node_get_attr_as_uint(program, "SECTOR_SIZE_IN_BYTES");
 	if (sector_size_in_bytes == G_MAXUINT64) {
 		g_set_error(error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_FAILED,
-			    "Missing 'SECTOR_SIZE_IN_BYTES' attribute in 'program' action for "
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_NOT_SUPPORTED,
+			    "missing 'SECTOR_SIZE_IN_BYTES' attribute in 'program' action for "
 			    "filename '%s'",
 			    filename_attr);
 		return FALSE;
@@ -152,9 +154,9 @@ validate_program_action(XbNode *program, FuArchive *archive, GError **error)
 	if (computed_num_partition_sectors != num_partition_sectors) {
 		g_set_error(
 		    error,
-		    G_IO_ERROR,
-		    G_IO_ERROR_FAILED,
-		    "Invalid 'num_partition_sectors' in 'program' action for filename '%s': "
+		    FWUPD_ERROR,
+		    FWUPD_ERROR_INVALID_DATA,
+		    "invalid 'num_partition_sectors' in 'program' action for filename '%s': "
 		    "expected %" G_GUINT64_FORMAT " instead of %" G_GUINT64_FORMAT " bytes",
 		    filename_attr,
 		    computed_num_partition_sectors,
@@ -167,11 +169,11 @@ validate_program_action(XbNode *program, FuArchive *archive, GError **error)
 }
 
 gboolean
-fu_firehose_validate_rawprogram(GBytes *rawprogram,
-				FuArchive *archive,
-				XbSilo **out_silo,
-				GPtrArray **out_action_nodes,
-				GError **error)
+fu_firehose_updater_validate_rawprogram(GBytes *rawprogram,
+					FuArchive *archive,
+					XbSilo **out_silo,
+					GPtrArray **out_action_nodes,
+					GError **error)
 {
 	g_autoptr(XbBuilder) builder = xb_builder_new();
 	g_autoptr(XbBuilderSource) source = xb_builder_source_new();
@@ -189,14 +191,14 @@ fu_firehose_validate_rawprogram(GBytes *rawprogram,
 	data_node = xb_silo_get_root(silo);
 	action_nodes = xb_node_get_children(data_node);
 	if (action_nodes == NULL || action_nodes->len == 0) {
-		g_set_error(error, G_IO_ERROR, G_IO_ERROR_FAILED, "No actions given");
+		g_set_error(error, FWUPD_ERROR, FWUPD_ERROR_NOT_SUPPORTED, "no actions given");
 		return FALSE;
 	}
 
 	for (guint i = 0; i < action_nodes->len; i++) {
 		XbNode *n = g_ptr_array_index(action_nodes, i);
 		if ((g_strcmp0(xb_node_get_element(n), "program") == 0) &&
-		    !validate_program_action(n, archive, error)) {
+		    !fu_firehose_updater_validate_program_action(n, archive, error)) {
 			return FALSE;
 		}
 	}
@@ -204,6 +206,12 @@ fu_firehose_validate_rawprogram(GBytes *rawprogram,
 	*out_silo = g_steal_pointer(&silo);
 	*out_action_nodes = g_steal_pointer(&action_nodes);
 	return TRUE;
+}
+
+void
+fu_firehose_updater_set_supports_zlp(FuFirehoseUpdater *self, gboolean supports_zlp)
+{
+	self->supports_zlp = supports_zlp;
 }
 
 gboolean
@@ -226,14 +234,17 @@ fu_firehose_updater_open(FuFirehoseUpdater *self, GError **error)
 	g_debug("opening firehose port...");
 
 	if (self->port != NULL) {
-		self->io_channel = fu_io_channel_new_file(self->port, error);
+		self->io_channel = fu_io_channel_new_file(self->port,
+							  FU_IO_CHANNEL_OPEN_FLAG_READ |
+							      FU_IO_CHANNEL_OPEN_FLAG_WRITE,
+							  error);
 		return self->io_channel != NULL;
 	}
 
-	g_set_error(error,
-		    G_IO_ERROR,
-		    G_IO_ERROR_NOT_FOUND,
-		    "No device to write firehose commands to");
+	g_set_error_literal(error,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_NOT_FOUND,
+			    "no device to write firehose commands to");
 	return FALSE;
 }
 
@@ -281,7 +292,10 @@ fu_firehose_updater_process_response(GBytes *rsp_bytes,
 
 	data_node = xb_silo_get_root(silo);
 	if (data_node == NULL) {
-		g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_FAILED, "Missing root data node");
+		g_set_error_literal(error,
+				    FWUPD_ERROR,
+				    FWUPD_ERROR_INVALID_DATA,
+				    "missing root data node");
 		return FALSE;
 	}
 
@@ -331,14 +345,14 @@ fu_firehose_updater_send_and_receive(FuFirehoseUpdater *self,
 		g_byte_array_append(take_cmd_bytearray,
 				    (const guint8 *)cmd_trailer,
 				    strlen(cmd_trailer));
-		cmd_bytes = g_byte_array_free_to_bytes(take_cmd_bytearray);
+		cmd_bytes = g_bytes_new(take_cmd_bytearray->data, take_cmd_bytearray->len);
 
 		fu_firehose_updater_log_message("writing", cmd_bytes);
-		if (!fu_firehose_write(self,
-				       cmd_bytes,
-				       1500,
-				       FU_IO_CHANNEL_FLAG_FLUSH_INPUT,
-				       error)) {
+		if (!fu_firehose_updater_write_internal(self,
+							cmd_bytes,
+							1500,
+							FU_IO_CHANNEL_FLAG_FLUSH_INPUT,
+							error)) {
 			g_prefix_error(error, "Failed to write command: ");
 			return FALSE;
 		}
@@ -349,10 +363,10 @@ fu_firehose_updater_send_and_receive(FuFirehoseUpdater *self,
 		g_autoptr(XbSilo) silo = NULL;
 		g_autoptr(XbNode) response_node = NULL;
 
-		rsp_bytes = fu_firehose_read(self,
-					     DEFAULT_RECV_TIMEOUT_MS,
-					     FU_IO_CHANNEL_FLAG_SINGLE_SHOT,
-					     error);
+		rsp_bytes = fu_firehose_updater_read(self,
+						     DEFAULT_RECV_TIMEOUT_MS,
+						     FU_IO_CHANNEL_FLAG_SINGLE_SHOT,
+						     error);
 		if (rsp_bytes == NULL) {
 			g_prefix_error(error, "Failed to read XML message: ");
 			return FALSE;
@@ -377,9 +391,9 @@ fu_firehose_updater_send_and_receive(FuFirehoseUpdater *self,
 	}
 
 	g_set_error(error,
-		    G_IO_ERROR,
-		    G_IO_ERROR_TIMED_OUT,
-		    "Didn't get any response in the last %d messages",
+		    FWUPD_ERROR,
+		    FWUPD_ERROR_TIMED_OUT,
+		    "didn't get any response in the last %d messages",
 		    MAX_RECV_MESSAGES);
 	return FALSE;
 }
@@ -393,7 +407,8 @@ fu_firehose_updater_initialize(FuFirehoseUpdater *self, GError **error)
 		g_autoptr(GBytes) rsp_bytes = NULL;
 		guint timeout = (i == 0 ? INITIALIZE_INITIAL_TIMEOUT_MS : INITIALIZE_TIMEOUT_MS);
 
-		rsp_bytes = fu_firehose_read(self, timeout, FU_IO_CHANNEL_FLAG_SINGLE_SHOT, NULL);
+		rsp_bytes =
+		    fu_firehose_updater_read(self, timeout, FU_IO_CHANNEL_FLAG_SINGLE_SHOT, NULL);
 		if (rsp_bytes == NULL)
 			break;
 
@@ -408,9 +423,9 @@ fu_firehose_updater_initialize(FuFirehoseUpdater *self, GError **error)
 
 	if (n_msg == 0) {
 		g_set_error(error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_FAILED,
-			    "Couldn't read initial firehose messages from device");
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_INTERNAL,
+			    "couldn't read initial firehose messages from device");
 		return FALSE;
 	}
 
@@ -440,7 +455,7 @@ fu_firehose_updater_configure(FuFirehoseUpdater *self, GError **error)
 		g_string_append_printf(cmd_str,
 				       " MaxPayloadSizeToTargetInBytes=\"%d\"",
 				       max_payload_size);
-		g_string_append_printf(cmd_str, " ZlpAwareHost=\"%d\"", CONFIGURE_ZLP_AWARE_HOST);
+		g_string_append_printf(cmd_str, " ZlpAwareHost=\"%d\"", self->supports_zlp ? 1 : 0);
 		g_string_append_printf(cmd_str,
 				       " SkipStorageInit=\"%d\"",
 				       CONFIGURE_SKIP_STORAGE_INIT);
@@ -478,7 +493,10 @@ fu_firehose_updater_configure(FuFirehoseUpdater *self, GError **error)
 		return max_payload_size;
 	}
 
-	g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_FAILED, "Configure operation failed");
+	g_set_error_literal(error,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_NOT_SUPPORTED,
+			    "configure operation failed");
 	return 0;
 }
 
@@ -503,7 +521,10 @@ fu_firehose_updater_reset(FuFirehoseUpdater *self, GError **error)
 	}
 
 	if (!fu_firehose_updater_check_operation_result(rsp_node, NULL)) {
-		g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_FAILED, "Reset operation failed");
+		g_set_error_literal(error,
+				    FWUPD_ERROR,
+				    FWUPD_ERROR_NOT_SUPPORTED,
+				    "reset operation failed");
 		return FALSE;
 	}
 
@@ -525,42 +546,46 @@ fu_firehose_updater_send_program_file(FuFirehoseUpdater *self,
 				      gsize sector_size,
 				      GError **error)
 {
-	g_autoptr(GPtrArray) chunks = NULL;
-	FuChunk *chk;
+	g_autoptr(FuChunkArray) chunks = fu_chunk_array_new_from_bytes(program_file,
+								       FU_CHUNK_ADDR_OFFSET_NONE,
+								       FU_CHUNK_PAGESZ_NONE,
+								       payload_size);
 
-	chunks = fu_chunk_array_new_from_bytes(program_file, 0, 0, payload_size);
-	/* last block needs to be padded to the next sector_size,
-	 * so that we always send full sectors */
-	chk = g_ptr_array_index(chunks, chunks->len - 1);
-	if ((fu_chunk_get_data_sz(chk) % sector_size) != 0) {
-		g_autoptr(GBytes) padded_bytes = NULL;
-		gsize padded_sz = sector_size * (fu_chunk_get_data_sz(chk) / sector_size + 1);
+	for (guint i = 0; i < fu_chunk_array_length(chunks); i++) {
+		g_autoptr(FuChunk) chk = NULL;
+		g_autoptr(GBytes) block = NULL;
+		g_autoptr(GBytes) block_padded = NULL;
+		gsize block_padded_sz;
 
-		padded_bytes = fu_bytes_pad(fu_chunk_get_bytes(chk), padded_sz);
-		fu_chunk_set_bytes(chk, padded_bytes);
+		/* prepare chunk */
+		chk = fu_chunk_array_index(chunks, i, error);
+		if (chk == NULL)
+			return FALSE;
 
-		g_return_val_if_fail(fu_chunk_get_data_sz(chk) == padded_sz, FALSE);
-	}
-	for (guint i = 0; i < chunks->len; i++) {
-		chk = g_ptr_array_index(chunks, i);
+		block = fu_chunk_get_bytes(chk);
+		/* block needs to be padded to the next sector_size,
+		 * so that we always send full sectors */
+		block_padded_sz =
+		    ((g_bytes_get_size(block) + sector_size - 1) / sector_size) * sector_size;
+		block_padded = fu_bytes_pad(block, block_padded_sz);
 
 		/* log only in blocks of 250 plus first/last */
-		if (i == 0 || i == (chunks->len - 1) || (i + 1) % 250 == 0)
-			g_debug("sending %u bytes in block %u/%u of file '%s'",
-				fu_chunk_get_data_sz(chk),
+		if (i == 0 || i == (fu_chunk_array_length(chunks) - 1) || (i + 1) % 250 == 0)
+			g_debug("sending %" G_GSIZE_FORMAT " bytes in block %u/%u of file '%s'",
+				block_padded_sz,
 				i + 1,
-				chunks->len,
+				fu_chunk_array_length(chunks),
 				program_filename);
 
-		if (!fu_firehose_write(self,
-				       fu_chunk_get_bytes(chk),
-				       1500,
-				       FU_IO_CHANNEL_FLAG_FLUSH_INPUT,
-				       error)) {
+		if (!fu_firehose_updater_write_internal(self,
+							block_padded,
+							1500,
+							FU_IO_CHANNEL_FLAG_FLUSH_INPUT,
+							error)) {
 			g_prefix_error(error,
-				       "Failed to write block %u/%u of file '%s': ",
+				       "failed to write block %u/%u of file '%s': ",
 				       i + 1,
-				       chunks->len,
+				       fu_chunk_array_length(chunks),
 				       program_filename);
 			return FALSE;
 		}
@@ -592,9 +617,9 @@ fu_firehose_updater_actions_validate(GPtrArray *action_nodes,
 		program_file = xb_node_get_data(node, name);
 		if (program_file == NULL) {
 			g_set_error(error,
-				    G_IO_ERROR,
-				    G_IO_ERROR_FAILED,
-				    "Failed to validate program file: failed to get %s",
+				    FWUPD_ERROR,
+				    FWUPD_ERROR_NOT_SUPPORTED,
+				    "failed to validate program file: failed to get %s",
 				    name);
 			return FALSE;
 		}
@@ -602,9 +627,9 @@ fu_firehose_updater_actions_validate(GPtrArray *action_nodes,
 		program_filename = xb_node_get_attr(node, name);
 		if (program_filename == NULL) {
 			g_set_error(error,
-				    G_IO_ERROR,
-				    G_IO_ERROR_FAILED,
-				    "Failed to validate program file: failed to get %s",
+				    FWUPD_ERROR,
+				    FWUPD_ERROR_NOT_SUPPORTED,
+				    "failed to validate program file: failed to get %s",
 				    name);
 			return FALSE;
 		}
@@ -612,9 +637,9 @@ fu_firehose_updater_actions_validate(GPtrArray *action_nodes,
 		program_sector_size_in_bytes = xb_node_get_attr_as_uint(node, name);
 		if (program_sector_size_in_bytes > max_payload_size) {
 			g_set_error(error,
-				    G_IO_ERROR,
-				    G_IO_ERROR_FAILED,
-				    "Failed to validate program file '%s' command: "
+				    FWUPD_ERROR,
+				    FWUPD_ERROR_INVALID_DATA,
+				    "failed to validate program file '%s' command: "
 				    "requested sector size bigger (%" G_GUINT64_FORMAT " bytes) "
 				    "than maximum payload size agreed with device (%u bytes)",
 				    program_filename,
@@ -677,15 +702,22 @@ fu_firehose_updater_run_action_program(FuFirehoseUpdater *self,
 
 	if (rawmode == FALSE) {
 		g_set_error(error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_FAILED,
-			    "Failed to download program file '%s': rawmode not enabled",
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_NOT_SUPPORTED,
+			    "failed to download program file '%s': rawmode not enabled",
 			    program_filename);
 		return FALSE;
 	}
 
 	while ((payload_size + (guint)program_sector_size) <= max_payload_size)
 		payload_size += (guint)program_sector_size;
+	if (payload_size == 0) {
+		g_set_error_literal(error,
+				    FWUPD_ERROR,
+				    FWUPD_ERROR_INVALID_DATA,
+				    "payload size invalid");
+		return FALSE;
+	}
 
 	g_debug("sending program file '%s' (0x%x bytes)",
 		program_filename,
@@ -696,32 +728,32 @@ fu_firehose_updater_run_action_program(FuFirehoseUpdater *self,
 						   payload_size,
 						   program_sector_size,
 						   error)) {
-		g_prefix_error(error, "Failed to send program file '%s': ", program_filename);
+		g_prefix_error(error, "failed to send program file '%s': ", program_filename);
 		return FALSE;
 	}
 
 	g_debug("waiting for program file download confirmation...");
 	if (!fu_firehose_updater_send_and_receive(self, NULL, &rsp_silo, &rsp_node, error)) {
 		g_prefix_error(error,
-			       "Download confirmation not received for file '%s': ",
+			       "download confirmation not received for file '%s': ",
 			       program_filename);
 		return FALSE;
 	}
 
 	if (!fu_firehose_updater_check_operation_result(rsp_node, &rawmode)) {
 		g_set_error(error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_FAILED,
-			    "Download confirmation failed for file '%s'",
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_INTERNAL,
+			    "download confirmation failed for file '%s'",
 			    program_filename);
 		return FALSE;
 	}
 
 	if (rawmode != FALSE) {
 		g_set_error(error,
-			    G_IO_ERROR,
-			    G_IO_ERROR_FAILED,
-			    "Download confirmation failed for file '%s': rawmode still enabled",
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_INTERNAL,
+			    "download confirmation failed for file '%s': rawmode still enabled",
 			    program_filename);
 		return FALSE;
 	}
@@ -748,11 +780,7 @@ fu_firehose_updater_run_action(FuFirehoseUpdater *self,
 
 	action = xb_node_get_element(node);
 
-#if LIBXMLB_CHECK_VERSION(0, 2, 2)
 	cmd_str = xb_node_export(node, XB_NODE_EXPORT_FLAG_COLLAPSE_EMPTY, error);
-#else
-	cmd_str = xb_node_export(node, XB_NODE_EXPORT_FLAG_NONE, error);
-#endif
 	if (cmd_str == NULL)
 		return FALSE;
 	cmd_bytearray = g_byte_array_new_take((guint8 *)cmd_str, strlen(cmd_str));
@@ -763,12 +791,16 @@ fu_firehose_updater_run_action(FuFirehoseUpdater *self,
 						  &rsp_silo,
 						  &rsp_node,
 						  error)) {
-		g_prefix_error(error, "Failed to run command '%s': ", action);
+		g_prefix_error(error, "failed to run command '%s': ", action);
 		return FALSE;
 	}
 
 	if (!fu_firehose_updater_check_operation_result(rsp_node, &rawmode)) {
-		g_set_error(error, G_IO_ERROR, G_IO_ERROR_FAILED, "Command '%s' failed", action);
+		g_set_error(error,
+			    FWUPD_ERROR,
+			    FWUPD_ERROR_INTERNAL,
+			    "command '%s' failed",
+			    action);
 		return FALSE;
 	}
 
@@ -854,6 +886,8 @@ fu_firehose_updater_write(FuFirehoseUpdater *self,
 static void
 fu_firehose_updater_init(FuFirehoseUpdater *self)
 {
+	/* supported by most devices - enable by default */
+	self->supports_zlp = TRUE;
 }
 
 static void

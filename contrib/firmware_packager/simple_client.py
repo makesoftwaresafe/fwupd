@@ -1,5 +1,9 @@
-#!/usr/bin/python3
-# SPDX-License-Identifier: LGPL-2.1+
+#!/usr/bin/env python3
+#
+# Copyright 2019 Mario Limonciello <mario.limonciello@dell.com>
+#
+# SPDX-License-Identifier: LGPL-2.1-or-later
+
 """A simple fwupd frontend"""
 import sys
 import os
@@ -24,7 +28,7 @@ class Progress:
         """Indicate new device string to track"""
         if self.device != new_device:
             self.device = new_device
-            print("\nUpdating %s" % self.device)
+            print(f"\nUpdating {self.device}")
 
     def status_changed(self, percent, status):
         """Indicate new status string or % complete to track"""
@@ -126,13 +130,13 @@ def device_changed(client, device, progress):  # pylint: disable=unused-argument
     progress.device_changed(device.get_name())
 
 
-def modify_config(client, key, value):
+def modify_config(client, section, key, value):
     """Use fwupd client to modify daemon configuration value"""
     try:
-        print("setting configuration key %s to %s" % (key, value))
-        client.modify_config(key, value, None)
+        print(f"setting configuration key {key} to {value}")
+        client.modify_config(section, key, value, None)
     except Exception as e:
-        print("%s" % str(e))
+        print(f"{str(e)}")
         sys.exit(1)
 
 
@@ -155,7 +159,7 @@ def install(client, cab, target, older, reinstall):
         client.install(target, cab, flags, None)
     except GLib.Error as glib_err:  # pylint: disable=catching-non-exception
         progress.status_changed(0, "idle")
-        print("%s" % glib_err)
+        print(f"{glib_err}")
         sys.exit(1)
     print("\n")
 
@@ -167,12 +171,9 @@ def get_daemon_property(key: str):
         iface = dbus.Interface(proxy, "org.freedesktop.DBus.Properties")
         val = iface.Get("org.freedesktop.fwupd", key)
         if isinstance(val, dbus.Boolean):
-            print(
-                "org.freedesktop.fwupd property %s, current value is %s"
-                % (key, bool(val))
-            )
+            print(f"org.freedesktop.fwupd property {key}, current value is {bool(val)}")
         else:
-            print("org.freedesktop.fwupd property %s, current value is %s" % (key, val))
+            print(f"org.freedesktop.fwupd property {key}, current value is {val}")
         return val
     except dbus.DBusException as e:
         print(e)
@@ -185,7 +186,7 @@ def check_exists(cab):
         print("Need to specify payload")
         sys.exit(1)
     if not os.path.isfile(cab):
-        print("%s doesn't exist or isn't a file" % cab)
+        print(f"{cab} doesn't exist or isn't a file")
         sys.exit(1)
 
 

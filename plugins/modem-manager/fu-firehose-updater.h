@@ -1,8 +1,8 @@
 /*
- * Copyright (C) 2020 Aleksander Morgado <aleksander@aleksander.es>
- * Copyright (C) 2021 Ivan Mikhanchuk <ivan.mikhanchuk@quectel.com>
+ * Copyright 2020 Aleksander Morgado <aleksander@aleksander.es>
+ * Copyright 2021 Ivan Mikhanchuk <ivan.mikhanchuk@quectel.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #pragma once
@@ -17,6 +17,8 @@ G_DECLARE_FINAL_TYPE(FuFirehoseUpdater, fu_firehose_updater, FU, FIREHOSE_UPDATE
 FuFirehoseUpdater *
 fu_firehose_updater_new(const gchar *port, FuSaharaLoader *sahara);
 
+void
+fu_firehose_updater_set_supports_zlp(FuFirehoseUpdater *self, gboolean supports_zlp);
 gboolean
 fu_firehose_updater_open(FuFirehoseUpdater *self, GError **error);
 gboolean
@@ -31,8 +33,8 @@ fu_firehose_updater_close(FuFirehoseUpdater *self, GError **error);
 /* helpers */
 
 gboolean
-fu_firehose_validate_rawprogram(GBytes *rawprogram,
-				FuArchive *archive,
-				XbSilo **out_silo,
-				GPtrArray **out_action_nodes,
-				GError **error);
+fu_firehose_updater_validate_rawprogram(GBytes *rawprogram,
+					FuArchive *archive,
+					XbSilo **out_silo,
+					GPtrArray **out_action_nodes,
+					GError **error);

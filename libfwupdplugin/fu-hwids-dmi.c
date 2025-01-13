@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2021 Richard Hughes <richard@hughsie.com>
+ * Copyright 2021 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #define G_LOG_DOMAIN "FuContext"
@@ -11,6 +11,7 @@
 #include "fu-context-private.h"
 #include "fu-hwids-private.h"
 #include "fu-path.h"
+#include "fu-smbios-struct.h"
 #include "fu-string.h"
 
 gboolean
@@ -46,6 +47,8 @@ fu_hwids_dmi_setup(FuContext *ctx, FuHwids *self, GError **error)
 			g_debug("unable to read SMBIOS data from %s: %s", fn, error_local->message);
 			continue;
 		}
+		if (bufsz == 0)
+			continue;
 
 		/* trim trailing newline added by kernel */
 		if (buf[bufsz - 1] == '\n')
@@ -58,6 +61,7 @@ fu_hwids_dmi_setup(FuContext *ctx, FuHwids *self, GError **error)
 					 &val,
 					 FU_SMBIOS_CHASSIS_KIND_OTHER,
 					 FU_SMBIOS_CHASSIS_KIND_LAST,
+					 FU_INTEGER_BASE_AUTO,
 					 &error_local)) {
 				g_warning("ignoring enclosure kind %s", buf);
 				continue;

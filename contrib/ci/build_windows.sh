@@ -8,12 +8,10 @@ if [ "$CI" != "true" ]; then
 fi
 
 # install deps
-./contrib/ci/fwupd_setup_helpers.py --yes -o fedora -v mingw64 install-dependencies
-
-# update to latest version of meson
 if [ "$(id -u)" -eq 0 ]; then
-    dnf install -y python-pip
-    pip install meson --force-reinstall
+    dnf install -y python3
+    dnf install -y xvfb-run
+    ./contrib/ci/fwupd_setup_helpers.py --yes -o fedora -v mingw64 install-dependencies
 fi
 
 #prep
@@ -23,6 +21,10 @@ export DESTDIR=${root}/dist
 build=$root/build-win32
 
 rm -rf $DESTDIR $build
+mkdir -p $build $DESTDIR && cd $build
+
+# run before using meson
+export WINEPREFIX=$build/.wine
 
 # For logitech bulk controller being disabled (-Dplugin_logitech_bulkcontroller=disabled):
 # See https://bugzilla.redhat.com/show_bug.cgi?id=1991749
@@ -32,8 +34,7 @@ rm -rf $DESTDIR $build
 # 3. Only enable when not a tagged release (Unsupported by Logitech)
 
 # try to keep this and ../contrib/build-windows.sh in sync as much as makes sense
-mkdir -p $build $DESTDIR && cd $build
-meson setup .. \
+xvfb-run meson setup .. \
     --cross-file=/usr/share/mingw/toolchain-mingw64.meson \
     --cross-file=../contrib/mingw64.cross \
     --prefix=/ \
@@ -42,37 +43,21 @@ meson setup .. \
     --bindir="bin" \
     -Dbuild=all \
     -Dman=false \
+    -Dtests=false \
+    -Dbuildtype=release \
+    -Ddbus_socket_address="tcp:host=localhost,port=1341" \
     -Dfish_completion=false \
     -Dbash_completion=false \
     -Dfirmware-packager=false \
     -Dmetainfo=false \
-    -Dcompat_cli=false \
-    -Dsoup_session_compat=false \
-    -Dgcab:introspection=false \
-    -Dgcab:docs=false \
-    -Dgcab:nls=false \
-    -Dgcab:vapi=false \
-    -Dgcab:tests=false \
-    -Dlibxmlb:introspection=false \
-    -Dlibxmlb:gtkdoc=false \
+    -Dpassim=disabled \
     -Dlibjcat:man=false \
     -Dlibjcat:gpg=false \
     -Dlibjcat:tests=false \
     -Dlibjcat:introspection=false \
-    -Dgusb:tests=false \
-    -Dgusb:docs=false \
-    -Dgusb:introspection=false \
-    -Dgusb:vapi=false $@
+    $@
 VERSION=$(meson introspect . --projectinfo | jq -r .version)
-
-# run tests
-export WINEPATH="/usr/x86_64-w64-mingw32/sys-root/mingw/bin/;$build/libfwupd/;$build/libfwupdplugin/;$build/subprojects/libxmlb/src/;$build/subprojects/gcab/libgcab/;$build/subprojects/libjcat/libjcat/;$build/subprojects/gusb/gusb/"
-ninja --verbose -C "$build" -v
-ninja -C "$build" test
-
-# switch to release optimizations
-meson configure -Dtests=false -Dbuildtype=release
-ninja -C "$build" -v install
+ninja --verbose -C "$build" -v install
 
 #disable motd for Windows
 cd $root
@@ -91,7 +76,7 @@ find $MINGW32BINDIR \
 	-o -name libbrotlicommon.dll \
 	-o -name libbrotlidec.dll \
 	-o -name libbz2-1.dll \
-	-o -name libcrypto-1_1-x64.dll \
+	-o -name libcrypto-3-x64.dll \
 	-o -name libcurl-4.dll \
 	-o -name "libffi-*.dll" \
 	-o -name libgcc_s_seh-1.dll \
@@ -101,7 +86,6 @@ find $MINGW32BINDIR \
 	-o -name libgmp-10.dll \
 	-o -name libgnutls-30.dll \
 	-o -name libgobject-2.0-0.dll \
-	-o -name libgusb-2.dll \
 	-o -name "libhogweed-*.dll" \
 	-o -name libidn2-0.dll \
 	-o -name libintl-8.dll \
@@ -109,15 +93,17 @@ find $MINGW32BINDIR \
 	-o -name liblzma-5.dll \
 	-o -name "libnettle-*.dll" \
 	-o -name libp11-kit-0.dll \
-	-o -name libpcre-1.dll \
+	-o -name libpcre2-8-0.dll \
 	-o -name libsqlite3-0.dll \
 	-o -name libssh2-1.dll \
-	-o -name libssl-1_1-x64.dll \
+	-o -name libssl-3-x64.dll \
 	-o -name libssp-0.dll \
 	-o -name libtasn1-6.dll \
 	-o -name libusb-1.0.dll \
 	-o -name libwinpthread-1.dll \
 	-o -name libxml2-2.dll \
+	-o -name libxmlb-2.dll \
+	-o -name libzstd.dll \
 	-o -name zlib1.dll \
 	| wixl-heat \
 	-p $MINGW32BINDIR/ \
@@ -126,6 +112,15 @@ find $MINGW32BINDIR \
 	--var "var.MINGW32BINDIR" \
 	--component-group "CG.fwupd-deps" | \
 	tee $build/contrib/fwupd-deps.wxs
+
+echo $CERTDIR/ca-bundle.crt \
+	| wixl-heat \
+	-p $CERTDIR/ \
+	--win64 \
+	--directory-ref BINDIR \
+	--var "var.CERTDIR" \
+	--component-group "CG.fwupd-crts" | \
+	tee $build/contrib/fwupd-crts.wxs
 
 # no static libraries
 find "$DESTDIR/" -type f -name "*.a" -print0 | xargs rm -f
@@ -156,20 +151,20 @@ MSI_FILENAME="$DESTDIR/setup/fwupd-$VERSION-setup-x86_64.msi"
 mkdir -p "$DESTDIR/setup"
 wixl -v \
 	"$build/contrib/fwupd.wxs" \
+	"$build/contrib/fwupd-crts.wxs" \
 	"$build/contrib/fwupd-deps.wxs" \
 	"$build/contrib/fwupd-files.wxs" \
-	-D CRTDIR=$CERTDIR \
+	-D CERTDIR=$CERTDIR \
 	-D MINGW32BINDIR=$MINGW32BINDIR \
 	-D Win64="yes" \
 	-D DESTDIR="$DESTDIR" \
 	-o "${MSI_FILENAME}"
 
 # check the msi archive can be installed and removed (use "wine uninstaller" to do manually)
-# wine msiexec /i "${MSI_FILENAME}"
-# ls -R ~/.wine/drive_c/Program\ Files/fwupd/
-# wine ~/.wine/drive_c/Program\ Files/fwupd/bin/fwupdtool get-plugins --json
-# wine msiexec /x "${MSI_FILENAME}"
+wine msiexec /i "${MSI_FILENAME}"
+ls -R ${WINEPREFIX}/drive_c/Program\ Files/fwupd/
+wine ${WINEPREFIX}/drive_c/Program\ Files/fwupd/bin/fwupdtool.exe get-plugins --json
+wine msiexec /x "${MSI_FILENAME}"
 
 #generate news release
 contrib/ci/generate_news.py $VERSION > $DESTDIR/news.txt
-echo $VERSION > $DESTDIR/VERSION

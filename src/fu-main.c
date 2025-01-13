@@ -1,14 +1,14 @@
 /*
- * Copyright (C) 2015 Richard Hughes <richard@hughsie.com>
+ * Copyright 2015 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #define G_LOG_DOMAIN "FuMain"
 
 #include "config.h"
 
-#include <gio/gio.h>
+#include <fwupd.h>
 #include <glib/gi18n.h>
 #include <glib/gstdio.h>
 #include <locale.h>
@@ -20,9 +20,6 @@
 #ifdef HAVE_SYSTEMD
 #include <systemd/sd-daemon.h>
 #endif
-#ifdef HAVE_MALLOC_H
-#include <malloc.h>
-#endif
 
 #include "fu-daemon.h"
 #include "fu-debug.h"
@@ -32,8 +29,10 @@ static gboolean
 fu_main_sigterm_cb(gpointer user_data)
 {
 	FuDaemon *daemon = FU_DAEMON(user_data);
+	g_autoptr(GError) error = NULL;
 	g_warning("Received SIGTERM");
-	fu_daemon_stop(daemon);
+	if (!fu_daemon_stop(daemon, &error))
+		g_warning("failed to stop daemon, will wait: %s\n", error->message);
 	return G_SOURCE_CONTINUE;
 }
 #endif
@@ -42,7 +41,9 @@ static gboolean
 fu_main_timed_exit_cb(gpointer user_data)
 {
 	FuDaemon *daemon = FU_DAEMON(user_data);
-	fu_daemon_stop(daemon);
+	g_autoptr(GError) error = NULL;
+	if (!fu_daemon_stop(daemon, &error))
+		g_warning("failed to stop daemon, will wait: %s\n", error->message);
 	return G_SOURCE_REMOVE;
 }
 
@@ -54,20 +55,22 @@ fu_main_argv_changed_cb(GFileMonitor *monitor,
 			gpointer user_data)
 {
 	FuDaemon *daemon = FU_DAEMON(user_data);
+	g_autoptr(GError) error = NULL;
 	g_info("binary changed, shutting down");
-	fu_daemon_stop(daemon);
+	if (!fu_daemon_stop(daemon, &error))
+		g_warning("failed to stop daemon, will wait: %s\n", error->message);
 }
 
-#if GLIB_CHECK_VERSION(2, 63, 3)
 static void
 fu_main_memory_monitor_warning_cb(GMemoryMonitor *memory_monitor,
 				  GMemoryMonitorWarningLevel level,
 				  FuDaemon *daemon)
 {
+	g_autoptr(GError) error = NULL;
 	g_info("OOM event, shutting down");
-	fu_daemon_stop(daemon);
+	if (!fu_daemon_stop(daemon, &error))
+		g_warning("failed to stop daemon, will wait: %s\n", error->message);
 }
-#endif
 
 static gboolean
 fu_main_is_hypervisor(void)
@@ -123,9 +126,7 @@ main(int argc, char *argv[])
 	g_autoptr(GOptionContext) context = NULL;
 	g_autoptr(FuDaemon) daemon = fu_daemon_new();
 	g_autoptr(GFileMonitor) argv0_monitor = NULL;
-#if GLIB_CHECK_VERSION(2, 63, 3)
 	g_autoptr(GMemoryMonitor) memory_monitor = NULL;
-#endif
 
 	setlocale(LC_ALL, "");
 
@@ -153,6 +154,12 @@ main(int argc, char *argv[])
 	} else {
 		fu_daemon_set_machine_kind(daemon, FU_DAEMON_MACHINE_KIND_PHYSICAL);
 	}
+
+#ifdef FWUPD_DBUS_SOCKET_ADDRESS
+	/* this is set for macOS and Windows */
+	if (socket_filename == NULL)
+		socket_filename = g_strdup(FWUPD_DBUS_SOCKET_ADDRESS);
+#endif
 
 	/* convert from filename to address, if required */
 	if (socket_filename != NULL) {
@@ -185,7 +192,6 @@ main(int argc, char *argv[])
 			 G_CALLBACK(fu_main_argv_changed_cb),
 			 daemon);
 
-#if GLIB_CHECK_VERSION(2, 63, 3)
 	/* shut down on low memory event as we can just rescan hardware */
 	memory_monitor = g_memory_monitor_dup_default();
 	if (memory_monitor != NULL) {
@@ -194,7 +200,6 @@ main(int argc, char *argv[])
 				 G_CALLBACK(fu_main_memory_monitor_warning_cb),
 				 daemon);
 	}
-#endif
 
 	/* Only timeout and close the mainloop if we have specified it
 	 * on the command line */
@@ -203,14 +208,12 @@ main(int argc, char *argv[])
 	else if (timed_exit)
 		g_timeout_add_seconds(5, fu_main_timed_exit_cb, daemon);
 
-#ifdef HAVE_MALLOC_TRIM
-	/* drop heap except one page */
-	malloc_trim(4096);
-#endif
-
 	/* wait */
 	g_message("Daemon ready for requests (locale %s)", g_getenv("LANG"));
-	fu_daemon_start(daemon);
+	if (!fu_daemon_start(daemon, &error)) {
+		g_printerr("Failed to start daemon: %s\n", error->message);
+		return EXIT_FAILURE;
+	}
 
 #ifdef HAVE_SYSTEMD
 	/* notify the service manager */

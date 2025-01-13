@@ -1,13 +1,14 @@
 /*
- * Copyright (C) 2020 Richard Hughes <richard@hughsie.com>
+ * Copyright 2020 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #pragma once
 
 #include <json-glib/json-glib.h>
 
+#include "fwupd-build.h"
 #include "fwupd-security-attr.h"
 
 G_BEGIN_DECLS
@@ -94,30 +95,6 @@ G_BEGIN_DECLS
  * Since: 1.5.0
  **/
 #define FWUPD_SECURITY_ATTR_ID_INTEL_BOOTGUARD_OTP "org.fwupd.hsi.IntelBootguard.Otp"
-/**
- * FWUPD_SECURITY_ATTR_ID_INTEL_CET_ENABLED:
- *
- * Host Security ID attribute for Intel CET enabled
- *
- * Since: 1.5.0
- **/
-#define FWUPD_SECURITY_ATTR_ID_INTEL_CET_ENABLED "org.fwupd.hsi.IntelCet.Enabled"
-/**
- * FWUPD_SECURITY_ATTR_ID_INTEL_CET_ACTIVE:
- *
- * Host Security ID attribute for Intel CET active
- *
- * Since: 1.5.0
- **/
-#define FWUPD_SECURITY_ATTR_ID_INTEL_CET_ACTIVE "org.fwupd.hsi.IntelCet.Active"
-/**
- * FWUPD_SECURITY_ATTR_ID_INTEL_SMAP:
- *
- * Host Security ID attribute for Intel SMAP
- *
- * Since: 1.5.0
- **/
-#define FWUPD_SECURITY_ATTR_ID_INTEL_SMAP "org.fwupd.hsi.IntelSmap"
 /**
  * FWUPD_SECURITY_ATTR_ID_IOMMU:
  *
@@ -263,6 +240,14 @@ G_BEGIN_DECLS
  **/
 #define FWUPD_SECURITY_ATTR_ID_UEFI_SECUREBOOT "org.fwupd.hsi.Uefi.SecureBoot"
 /**
+ * FWUPD_SECURITY_ATTR_ID_UEFI_BOOTSERVICE_VARS:
+ *
+ * Host Security ID attribute indicating if Bootservice-only variables are hidden.
+ *
+ * Since: 1.9.3
+ **/
+#define FWUPD_SECURITY_ATTR_ID_UEFI_BOOTSERVICE_VARS "org.fwupd.hsi.Uefi.BootserviceVars"
+/**
  * FWUPD_SECURITY_ATTR_ID_PLATFORM_DEBUG_ENABLED:
  *
  * Host Security ID attribute for parts with debugging capabilities enabled
@@ -349,14 +334,62 @@ G_BEGIN_DECLS
  * Since: 1.8.8
  **/
 #define FWUPD_SECURITY_ATTR_ID_BIOS_ROLLBACK_PROTECTION "org.fwupd.hsi.Bios.RollbackProtection"
+/**
+ * FWUPD_SECURITY_ATTR_ID_INTEL_GDS:
+ *
+ * Host Security ID attribute indicating the processor is safe against Gather Data Sampling.
+ *
+ * Since: 1.9.4
+ **/
+#define FWUPD_SECURITY_ATTR_ID_INTEL_GDS "org.fwupd.hsi.IntelGds"
+/**
+ * FWUPD_SECURITY_ATTR_ID_BIOS_CAPSULE_UPDATES:
+ *
+ * Host Security ID attribute indicating Capsule updates are supported by the BIOS.
+ *
+ * Since: 1.9.6
+ **/
+#define FWUPD_SECURITY_ATTR_ID_BIOS_CAPSULE_UPDATES "org.fwupd.hsi.Bios.CapsuleUpdates"
+/**
+ * FWUPD_SECURITY_ATTR_ID_SMAP:
+ *
+ * Host Security ID attribute for SMAP
+ *
+ * NOTE: This attribute use to be known as org.fwupd.hsi.IntelSmap before fwupd 2.0.0
+ *
+ * Since: 2.0.0
+ **/
+#define FWUPD_SECURITY_ATTR_ID_SMAP "org.fwupd.hsi.Smap"
+/**
+ * FWUPD_SECURITY_ATTR_ID_CET_ENABLED:
+ *
+ * Host Security ID attribute for Intel CET enabled
+ *
+ * NOTE: This used to be known as org.fwupd.hsi.IntelCet.Enabled before fwupd 2.0.0
+ *
+ * Since: 2.0.0
+ **/
+#define FWUPD_SECURITY_ATTR_ID_CET_ENABLED "org.fwupd.hsi.Cet.Enabled"
+/**
+ * FWUPD_SECURITY_ATTR_ID_CET_ACTIVE:
+ *
+ * Host Security ID attribute for Intel CET active
+ *
+ * NOTE: This used to be known as org.fwupd.hsi.IntelCet.Active before fwupd 2.0.0
+ *
+ * Since: 2.0.0
+ **/
+#define FWUPD_SECURITY_ATTR_ID_CET_ACTIVE "org.fwupd.hsi.Cet.Active"
+/**
+ * FWUPD_SECURITY_ATTR_ID_AMD_SMM_LOCKED:
+ *
+ * Host Security ID attribute for AMD SMM locked
+ *
+ * Since: 2.0.2
+ **/
+#define FWUPD_SECURITY_ATTR_ID_AMD_SMM_LOCKED "org.fwupd.hsi.Amd.SmmLocked"
 
-GVariant *
-fwupd_security_attr_to_variant(FwupdSecurityAttr *self);
-void
-fwupd_security_attr_to_json(FwupdSecurityAttr *self, JsonBuilder *builder);
-gboolean
-fwupd_security_attr_from_json(FwupdSecurityAttr *self, JsonNode *json_node, GError **error);
 FwupdSecurityAttr *
-fwupd_security_attr_copy(FwupdSecurityAttr *self);
+fwupd_security_attr_copy(FwupdSecurityAttr *self) G_GNUC_NON_NULL(1);
 
 G_END_DECLS

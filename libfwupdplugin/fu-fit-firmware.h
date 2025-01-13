@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2022 Richard Hughes <richard@hughsie.com>
+ * Copyright 2022 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #pragma once
@@ -18,9 +18,9 @@ struct _FuFitFirmwareClass {
 FuFirmware *
 fu_fit_firmware_new(void);
 guint32
-fu_fit_firmware_get_timestamp(FuFitFirmware *self);
+fu_fit_firmware_get_timestamp(FuFitFirmware *self) G_GNUC_NON_NULL(1);
 void
-fu_fit_firmware_set_timestamp(FuFitFirmware *self, guint32 timestamp);
+fu_fit_firmware_set_timestamp(FuFitFirmware *self, guint32 timestamp) G_GNUC_NON_NULL(1);
 
 /**
  * FU_FIT_FIRMWARE_ATTR_COMPATIBLE:

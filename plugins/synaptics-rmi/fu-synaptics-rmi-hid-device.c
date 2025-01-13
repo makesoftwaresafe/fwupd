@@ -1,14 +1,12 @@
 /*
- * Copyright (C) 2020 Richard Hughes <richard@hughsie.com>
- * Copyright (c) 2020 Synaptics Incorporated.
- * Copyright (C) 2012 Andrew Duggan
+ * Copyright 2020 Richard Hughes <richard@hughsie.com>
+ * Copyright 2020 Synaptics Incorporated.
+ * Copyright 2012 Andrew Duggan
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #include "config.h"
-
-#include <fwupdplugin.h>
 
 #include <linux/hidraw.h>
 #include <sys/ioctl.h>
@@ -19,7 +17,6 @@
 
 struct _FuSynapticsRmiHidDevice {
 	FuSynapticsRmiDevice parent_instance;
-	FuIOChannel *io_channel;
 };
 
 G_DEFINE_TYPE(FuSynapticsRmiHidDevice, fu_synaptics_rmi_hid_device, FU_TYPE_SYNAPTICS_RMI_DEVICE)
@@ -68,6 +65,7 @@ fu_synaptics_rmi_hid_device_read(FuSynapticsRmiDevice *rmi_device,
 				 GError **error)
 {
 	FuSynapticsRmiHidDevice *self = FU_SYNAPTICS_RMI_HID_DEVICE(rmi_device);
+	FuIOChannel *io_channel = fu_udev_device_get_io_channel(FU_UDEV_DEVICE(self));
 	g_autoptr(GByteArray) buf = g_byte_array_new();
 	g_autoptr(GByteArray) req = g_byte_array_new();
 
@@ -94,7 +92,7 @@ fu_synaptics_rmi_hid_device_read(FuSynapticsRmiDevice *rmi_device,
 	for (guint j = req->len; j < 21; j++)
 		fu_byte_array_append_uint8(req, 0x0);
 	fu_dump_full(G_LOG_DOMAIN, "ReportWrite", req->data, req->len, 80, FU_DUMP_FLAGS_NONE);
-	if (!fu_io_channel_write_byte_array(self->io_channel,
+	if (!fu_io_channel_write_byte_array(io_channel,
 					    req,
 					    RMI_DEVICE_DEFAULT_TIMEOUT,
 					    FU_IO_CHANNEL_FLAG_SINGLE_SHOT |
@@ -106,7 +104,7 @@ fu_synaptics_rmi_hid_device_read(FuSynapticsRmiDevice *rmi_device,
 	while (buf->len < req_sz) {
 		guint8 input_count_sz = 0;
 		g_autoptr(GByteArray) res = NULL;
-		res = fu_io_channel_read_byte_array(self->io_channel,
+		res = fu_io_channel_read_byte_array(io_channel,
 						    req_sz,
 						    RMI_DEVICE_DEFAULT_TIMEOUT,
 						    FU_IO_CHANNEL_FLAG_SINGLE_SHOT,
@@ -181,6 +179,7 @@ fu_synaptics_rmi_hid_device_write(FuSynapticsRmiDevice *rmi_device,
 				  GError **error)
 {
 	FuSynapticsRmiHidDevice *self = FU_SYNAPTICS_RMI_HID_DEVICE(rmi_device);
+	FuIOChannel *io_channel = fu_udev_device_get_io_channel(FU_UDEV_DEVICE(self));
 	guint8 len = 0x0;
 	g_autoptr(GByteArray) buf = g_byte_array_new();
 
@@ -214,7 +213,7 @@ fu_synaptics_rmi_hid_device_write(FuSynapticsRmiDevice *rmi_device,
 		fu_byte_array_append_uint8(buf, 0x0);
 	fu_dump_full(G_LOG_DOMAIN, "DeviceWrite", buf->data, buf->len, 80, FU_DUMP_FLAGS_NONE);
 
-	return fu_io_channel_write_byte_array(self->io_channel,
+	return fu_io_channel_write_byte_array(io_channel,
 					      buf,
 					      RMI_DEVICE_DEFAULT_TIMEOUT,
 					      FU_IO_CHANNEL_FLAG_SINGLE_SHOT |
@@ -229,6 +228,7 @@ fu_synaptics_rmi_hid_device_wait_for_attr(FuSynapticsRmiDevice *rmi_device,
 					  GError **error)
 {
 	FuSynapticsRmiHidDevice *self = FU_SYNAPTICS_RMI_HID_DEVICE(rmi_device);
+	FuIOChannel *io_channel = fu_udev_device_get_io_channel(FU_UDEV_DEVICE(self));
 	g_autoptr(GTimer) timer = g_timer_new();
 
 	/* wait for event from hardware */
@@ -237,13 +237,13 @@ fu_synaptics_rmi_hid_device_wait_for_attr(FuSynapticsRmiDevice *rmi_device,
 		g_autoptr(GError) error_local = NULL;
 
 		/* read from fd */
-		res = fu_io_channel_read_byte_array(self->io_channel,
+		res = fu_io_channel_read_byte_array(io_channel,
 						    HID_RMI4_ATTN_INTERRUPT_SOURCES + 1,
 						    timeout_ms,
 						    FU_IO_CHANNEL_FLAG_NONE,
 						    &error_local);
 		if (res == NULL) {
-			if (g_error_matches(error_local, G_IO_ERROR, G_IO_ERROR_TIMED_OUT))
+			if (g_error_matches(error_local, FWUPD_ERROR, FWUPD_ERROR_TIMED_OUT))
 				break;
 			g_propagate_error(error, g_steal_pointer(&error_local));
 			return FALSE;
@@ -293,13 +293,17 @@ fu_synaptics_rmi_hid_device_set_mode(FuSynapticsRmiHidDevice *self,
 				     GError **error)
 {
 	const guint8 data[] = {0x0f, mode};
+	g_autoptr(FuIoctl) ioctl = fu_udev_device_ioctl_new(FU_UDEV_DEVICE(self));
+
 	fu_dump_raw(G_LOG_DOMAIN, "SetMode", data, sizeof(data));
-	return fu_udev_device_ioctl(FU_UDEV_DEVICE(self),
-				    HIDIOCSFEATURE(sizeof(data)),
-				    (guint8 *)data,
-				    NULL,
-				    FU_SYNAPTICS_RMI_HID_DEVICE_IOCTL_TIMEOUT,
-				    error);
+	return fu_ioctl_execute(ioctl,
+				HIDIOCSFEATURE(sizeof(data)), /* nocheck:blocked */
+				(guint8 *)data,
+				sizeof(data),
+				NULL,
+				FU_SYNAPTICS_RMI_HID_DEVICE_IOCTL_TIMEOUT,
+				FU_IOCTL_FLAG_NONE,
+				error);
 }
 
 static gboolean
@@ -312,7 +316,6 @@ fu_synaptics_rmi_hid_device_open(FuDevice *device, GError **error)
 		return FALSE;
 
 	/* set up touchpad so we can query it */
-	self->io_channel = fu_io_channel_unix_new(fu_udev_device_get_fd(FU_UDEV_DEVICE(device)));
 	if (!fu_synaptics_rmi_hid_device_set_mode(self, HID_RMI4_MODE_ATTN_REPORTS, error))
 		return FALSE;
 
@@ -336,9 +339,6 @@ fu_synaptics_rmi_hid_device_close(FuDevice *device, GError **error)
 		g_debug("ignoring: %s", error_local->message);
 	}
 
-	fu_udev_device_set_fd(FU_UDEV_DEVICE(device), -1);
-	g_clear_object(&self->io_channel);
-
 	/* FuUdevDevice->close */
 	return FU_DEVICE_CLASS(fu_synaptics_rmi_hid_device_parent_class)->close(device, error);
 }
@@ -346,57 +346,52 @@ fu_synaptics_rmi_hid_device_close(FuDevice *device, GError **error)
 static gboolean
 fu_synaptics_rmi_hid_device_rebind_driver(FuSynapticsRmiDevice *self, GError **error)
 {
-	GUdevDevice *udev_device = fu_udev_device_get_dev(FU_UDEV_DEVICE(self));
 	const gchar *hid_id;
 	const gchar *driver;
 	const gchar *subsystem;
 	g_autofree gchar *fn_rebind = NULL;
 	g_autofree gchar *fn_unbind = NULL;
-	g_autoptr(GUdevDevice) parent_hid = NULL;
-	g_autoptr(GUdevDevice) parent_phys = NULL;
+	g_autoptr(FuDevice) parent_hid = NULL;
+	g_autoptr(FuUdevDevice) parent_phys = NULL;
 	g_auto(GStrv) hid_strs = NULL;
 
 	/* get actual HID node */
-	parent_hid = g_udev_device_get_parent_with_subsystem(udev_device, "hid", NULL);
-	if (parent_hid == NULL) {
+	parent_hid = fu_device_get_backend_parent_with_subsystem(FU_DEVICE(self), "hid", error);
+	if (parent_hid == NULL)
+		return FALSE;
+
+	/* build paths */
+	parent_phys = FU_UDEV_DEVICE(
+	    fu_device_get_backend_parent_with_subsystem(FU_DEVICE(self), "i2c", NULL));
+	if (parent_phys == NULL) {
+		parent_phys = FU_UDEV_DEVICE(
+		    fu_device_get_backend_parent_with_subsystem(FU_DEVICE(self), "usb", NULL));
+	}
+	if (parent_phys == NULL) {
 		g_set_error(error,
 			    FWUPD_ERROR,
 			    FWUPD_ERROR_INVALID_FILE,
-			    "no HID parent device for %s",
-			    g_udev_device_get_sysfs_path(udev_device));
+			    "no parent device for %s",
+			    fu_udev_device_get_sysfs_path(FU_UDEV_DEVICE(parent_hid)));
 		return FALSE;
 	}
 
-	/* build paths */
-	parent_phys = g_udev_device_get_parent_with_subsystem(udev_device, "i2c", NULL);
-	if (parent_phys == NULL) {
-		parent_phys = g_udev_device_get_parent_with_subsystem(udev_device, "usb", NULL);
-		if (parent_phys == NULL) {
-			g_set_error(error,
-				    FWUPD_ERROR,
-				    FWUPD_ERROR_INVALID_FILE,
-				    "no parent device for %s",
-				    g_udev_device_get_sysfs_path(parent_hid));
-			return FALSE;
-		}
-	}
-
 	/* find the physical ID to use for the rebind */
-	hid_strs = g_strsplit(g_udev_device_get_sysfs_path(parent_phys), "/", -1);
+	hid_strs = g_strsplit(fu_udev_device_get_sysfs_path(parent_phys), "/", -1);
 	hid_id = hid_strs[g_strv_length(hid_strs) - 1];
 	if (hid_id == NULL) {
 		g_set_error(error,
 			    FWUPD_ERROR,
 			    FWUPD_ERROR_INVALID_FILE,
 			    "no HID_PHYS in %s",
-			    g_udev_device_get_sysfs_path(parent_phys));
+			    fu_udev_device_get_sysfs_path(parent_phys));
 		return FALSE;
 	}
 
 	g_debug("HID_PHYS: %s", hid_id);
 
-	driver = g_udev_device_get_driver(parent_phys);
-	subsystem = g_udev_device_get_subsystem(parent_phys);
+	driver = fu_udev_device_get_driver(parent_phys);
+	subsystem = fu_udev_device_get_subsystem(parent_phys);
 	fn_rebind = g_build_filename("/sys/bus/", subsystem, "drivers", driver, "bind", NULL);
 	fn_unbind = g_build_filename("/sys/bus/", subsystem, "drivers", driver, "unbind", NULL);
 
@@ -473,12 +468,6 @@ fu_synaptics_rmi_hid_device_set_page(FuSynapticsRmiDevice *self, guint8 page, GE
 }
 
 static gboolean
-fu_synaptics_rmi_hid_device_probe(FuDevice *device, GError **error)
-{
-	return fu_udev_device_set_physical_id(FU_UDEV_DEVICE(device), "hid", error);
-}
-
-static gboolean
 fu_synaptics_rmi_hid_device_disable_sleep(FuSynapticsRmiDevice *rmi_device, GError **error)
 {
 	FuSynapticsRmiFunction *f01;
@@ -544,26 +533,24 @@ fu_synaptics_rmi_hid_device_init(FuSynapticsRmiHidDevice *self)
 {
 	fu_device_set_name(FU_DEVICE(self), "Touchpad");
 	fu_device_set_remove_delay(FU_DEVICE(self), FU_DEVICE_REMOVE_DELAY_RE_ENUMERATE);
-	fu_device_add_internal_flag(FU_DEVICE(self), FU_DEVICE_INTERNAL_FLAG_NO_PROBE_COMPLETE);
 	fu_synaptics_rmi_device_set_max_page(FU_SYNAPTICS_RMI_DEVICE(self), 0xff);
 }
 
 static void
 fu_synaptics_rmi_hid_device_class_init(FuSynapticsRmiHidDeviceClass *klass)
 {
-	FuDeviceClass *klass_device = FU_DEVICE_CLASS(klass);
-	FuSynapticsRmiDeviceClass *klass_rmi = FU_SYNAPTICS_RMI_DEVICE_CLASS(klass);
-	klass_device->attach = fu_synaptics_rmi_hid_device_attach;
-	klass_device->detach = fu_synaptics_rmi_hid_device_detach;
-	klass_device->probe = fu_synaptics_rmi_hid_device_probe;
-	klass_device->open = fu_synaptics_rmi_hid_device_open;
-	klass_device->close = fu_synaptics_rmi_hid_device_close;
-	klass_device->set_progress = fu_synaptics_rmi_hid_device_set_progress;
-	klass_rmi->write = fu_synaptics_rmi_hid_device_write;
-	klass_rmi->read = fu_synaptics_rmi_hid_device_read;
-	klass_rmi->wait_for_attr = fu_synaptics_rmi_hid_device_wait_for_attr;
-	klass_rmi->set_page = fu_synaptics_rmi_hid_device_set_page;
-	klass_rmi->query_status = fu_synaptics_rmi_hid_device_query_status;
-	klass_rmi->read_packet_register = fu_synaptics_rmi_hid_device_read_packet_register;
-	klass_rmi->disable_sleep = fu_synaptics_rmi_hid_device_disable_sleep;
+	FuDeviceClass *device_class = FU_DEVICE_CLASS(klass);
+	FuSynapticsRmiDeviceClass *rmi_class = FU_SYNAPTICS_RMI_DEVICE_CLASS(klass);
+	device_class->attach = fu_synaptics_rmi_hid_device_attach;
+	device_class->detach = fu_synaptics_rmi_hid_device_detach;
+	device_class->open = fu_synaptics_rmi_hid_device_open;
+	device_class->close = fu_synaptics_rmi_hid_device_close;
+	device_class->set_progress = fu_synaptics_rmi_hid_device_set_progress;
+	rmi_class->write = fu_synaptics_rmi_hid_device_write;
+	rmi_class->read = fu_synaptics_rmi_hid_device_read;
+	rmi_class->wait_for_attr = fu_synaptics_rmi_hid_device_wait_for_attr;
+	rmi_class->set_page = fu_synaptics_rmi_hid_device_set_page;
+	rmi_class->query_status = fu_synaptics_rmi_hid_device_query_status;
+	rmi_class->read_packet_register = fu_synaptics_rmi_hid_device_read_packet_register;
+	rmi_class->disable_sleep = fu_synaptics_rmi_hid_device_disable_sleep;
 }

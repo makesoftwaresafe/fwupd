@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2015 Richard Hughes <richard@hughsie.com>
+ * Copyright 2015 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 /**
@@ -18,8 +18,6 @@
  */
 
 #include "config.h"
-
-#include <fwupdplugin.h>
 
 #include <math.h>
 #include <string.h>
@@ -65,13 +63,13 @@ fu_dfu_target_to_string(FuDevice *device, guint idt, GString *str)
 {
 	FuDfuTarget *self = FU_DFU_TARGET(device);
 	FuDfuTargetPrivate *priv = GET_PRIVATE(self);
-	fu_string_append_kx(str, idt, "AltSetting", priv->alt_setting);
-	fu_string_append_kx(str, idt, "AltIdx", priv->alt_idx);
+	fwupd_codec_string_append_hex(str, idt, "AltSetting", priv->alt_setting);
+	fwupd_codec_string_append_hex(str, idt, "AltIdx", priv->alt_idx);
 	for (guint i = 0; i < priv->sectors->len; i++) {
 		FuDfuSector *sector = g_ptr_array_index(priv->sectors, i);
 		g_autofree gchar *tmp1 = g_strdup_printf("Idx%02x", i);
 		g_autofree gchar *tmp2 = fu_dfu_sector_to_string(sector);
-		fu_string_append(str, idt + 1, tmp1, tmp2);
+		fwupd_codec_string_append(str, idt + 1, tmp1, tmp2);
 	}
 }
 
@@ -100,14 +98,14 @@ fu_dfu_target_parse_sector(FuDfuTarget *self,
 			   GError **error)
 {
 	FuDfuTargetPrivate *priv = GET_PRIVATE(self);
-	FuDfuSectorCap cap = DFU_SECTOR_CAP_NONE;
+	FuDfuSectorCap cap = FU_DFU_SECTOR_CAP_NONE;
 	gchar *tmp;
 	guint32 addr_offset = 0;
 	guint64 nr_sectors;
 	guint64 sector_size;
 
 	/* parse # of sectors */
-	nr_sectors = g_ascii_strtoull(dfuse_sector_id, &tmp, 10);
+	nr_sectors = g_ascii_strtoull(dfuse_sector_id, &tmp, 10); /* nocheck:blocked */
 	if (nr_sectors > 999) {
 		g_set_error(error,
 			    FWUPD_ERROR,
@@ -128,7 +126,7 @@ fu_dfu_target_parse_sector(FuDfuTarget *self,
 	}
 
 	/* parse sector size */
-	sector_size = g_ascii_strtoull(tmp + 1, &tmp, 10);
+	sector_size = g_ascii_strtoull(tmp + 1, &tmp, 10); /* nocheck:blocked */
 	if (sector_size > 999) {
 		g_set_error(error,
 			    FWUPD_ERROR,
@@ -170,25 +168,26 @@ fu_dfu_target_parse_sector(FuDfuTarget *self,
 	/* get sector type */
 	switch (tmp[1]) {
 	case 'a':
-		cap = DFU_SECTOR_CAP_READABLE;
+		cap = FU_DFU_SECTOR_CAP_READABLE;
 		break;
 	case 'b':
-		cap = DFU_SECTOR_CAP_ERASABLE;
+		cap = FU_DFU_SECTOR_CAP_ERASABLE;
 		break;
 	case 'c':
-		cap = DFU_SECTOR_CAP_READABLE | DFU_SECTOR_CAP_ERASABLE;
+		cap = FU_DFU_SECTOR_CAP_READABLE | FU_DFU_SECTOR_CAP_ERASABLE;
 		break;
 	case 'd':
-		cap = DFU_SECTOR_CAP_WRITEABLE;
+		cap = FU_DFU_SECTOR_CAP_WRITEABLE;
 		break;
 	case 'e':
-		cap = DFU_SECTOR_CAP_READABLE | DFU_SECTOR_CAP_WRITEABLE;
+		cap = FU_DFU_SECTOR_CAP_READABLE | FU_DFU_SECTOR_CAP_WRITEABLE;
 		break;
 	case 'f':
-		cap = DFU_SECTOR_CAP_ERASABLE | DFU_SECTOR_CAP_WRITEABLE;
+		cap = FU_DFU_SECTOR_CAP_ERASABLE | FU_DFU_SECTOR_CAP_WRITEABLE;
 		break;
 	case 'g':
-		cap = DFU_SECTOR_CAP_READABLE | DFU_SECTOR_CAP_ERASABLE | DFU_SECTOR_CAP_WRITEABLE;
+		cap = FU_DFU_SECTOR_CAP_READABLE | FU_DFU_SECTOR_CAP_ERASABLE |
+		      FU_DFU_SECTOR_CAP_WRITEABLE;
 		break;
 	default:
 		g_set_error(error,
@@ -230,9 +229,13 @@ fu_dfu_target_parse_sectors(FuDfuTarget *self, const gchar *alt_name, GError **e
 	/* From the Neo Freerunner */
 	if (g_str_has_prefix(alt_name, "RAM 0x")) {
 		FuDfuSector *sector;
-		guint64 addr_tmp;
-		addr_tmp = g_ascii_strtoull(alt_name + 6, NULL, 16);
-		if (addr_tmp == 0 || addr_tmp > G_MAXUINT32)
+		guint64 addr_tmp = 0;
+		if (!fu_strtoull(alt_name + 6,
+				 &addr_tmp,
+				 0,
+				 G_MAXUINT32,
+				 FU_INTEGER_BASE_16,
+				 error))
 			return FALSE;
 		g_debug("RAM description, so parsing");
 		sector = fu_dfu_sector_new((guint32)addr_tmp,
@@ -240,8 +243,8 @@ fu_dfu_target_parse_sectors(FuDfuTarget *self, const gchar *alt_name, GError **e
 					   0x0, /* size_left */
 					   0x0, /* zone */
 					   0x0, /* number */
-					   DFU_SECTOR_CAP_ERASABLE | DFU_SECTOR_CAP_READABLE |
-					       DFU_SECTOR_CAP_WRITEABLE);
+					   FU_DFU_SECTOR_CAP_ERASABLE | FU_DFU_SECTOR_CAP_READABLE |
+					       FU_DFU_SECTOR_CAP_WRITEABLE);
 		g_ptr_array_add(priv->sectors, sector);
 	}
 
@@ -257,7 +260,7 @@ fu_dfu_target_parse_sectors(FuDfuTarget *self, const gchar *alt_name, GError **e
 	fu_device_set_name(FU_DEVICE(self), g_strchomp(zones[0] + 1));
 	for (guint i = 1; zones[i] != NULL; i += 2) {
 		guint32 addr;
-		guint64 addr_tmp;
+		guint64 addr_tmp = 0;
 		g_auto(GStrv) sectors = NULL;
 
 		/* parse address */
@@ -268,12 +271,13 @@ fu_dfu_target_parse_sectors(FuDfuTarget *self, const gchar *alt_name, GError **e
 					    "No sector address");
 			return FALSE;
 		}
-		addr_tmp = g_ascii_strtoull(zones[i] + 2, NULL, 16);
-		if (addr_tmp > G_MAXUINT32) {
-			g_set_error_literal(error,
-					    FWUPD_ERROR,
-					    FWUPD_ERROR_NOT_SUPPORTED,
-					    "Sector address too large");
+		if (!fu_strtoull(zones[i] + 2,
+				 &addr_tmp,
+				 0,
+				 G_MAXUINT32,
+				 FU_INTEGER_BASE_16,
+				 error)) {
+			g_prefix_error(error, "sector address invalid: ");
 			return FALSE;
 		}
 		addr = (guint32)addr_tmp;
@@ -409,7 +413,7 @@ fu_dfu_target_manifest_wait(FuDfuTarget *self, GError **error)
 	guint polling_count = 0;
 
 	/* get the status */
-	if (!fu_dfu_device_refresh(device, error))
+	if (!fu_dfu_device_refresh(device, 0, error))
 		return FALSE;
 
 	/* wait for FU_DFU_STATE_DFU_MANIFEST to not be set */
@@ -427,7 +431,7 @@ fu_dfu_target_manifest_wait(FuDfuTarget *self, GError **error)
 
 		fu_device_sleep(FU_DEVICE(device),
 				fu_dfu_device_get_download_timeout(device) + 1000);
-		if (!fu_dfu_device_refresh(device, error))
+		if (!fu_dfu_device_refresh(device, 0, error))
 			return FALSE;
 	}
 
@@ -452,14 +456,14 @@ fu_dfu_target_check_status(FuDfuTarget *self, GError **error)
 	g_autoptr(GTimer) timer = g_timer_new();
 
 	/* get the status */
-	if (!fu_dfu_device_refresh(device, error))
+	if (!fu_dfu_device_refresh(device, 0, error))
 		return FALSE;
 
 	/* wait for dfuDNBUSY to not be set */
 	while (fu_dfu_device_get_state(device) == FU_DFU_STATE_DFU_DNBUSY) {
 		g_debug("waiting for FU_DFU_STATE_DFU_DNBUSY to clear");
 		fu_device_sleep(FU_DEVICE(device), fu_dfu_device_get_download_timeout(device));
-		if (!fu_dfu_device_refresh(device, error))
+		if (!fu_dfu_device_refresh(device, 0, error))
 			return FALSE;
 		/* this is a really long time to save fwupd in case
 		 * the device has got wedged */
@@ -517,7 +521,6 @@ fu_dfu_target_use_alt_setting(FuDfuTarget *self, GError **error)
 {
 	FuDfuDevice *device = FU_DFU_DEVICE(fu_device_get_proxy(FU_DEVICE(self)));
 	FuDfuTargetPrivate *priv = GET_PRIVATE(self);
-	GUsbDevice *usb_device = fu_usb_device_get_dev(FU_USB_DEVICE(device));
 	g_autoptr(GError) error_local = NULL;
 
 	g_return_val_if_fail(FU_IS_DFU_TARGET(self), FALSE);
@@ -529,10 +532,10 @@ fu_dfu_target_use_alt_setting(FuDfuTarget *self, GError **error)
 
 	/* use the correct setting */
 	if (fu_device_has_flag(FU_DEVICE(device), FWUPD_DEVICE_FLAG_IS_BOOTLOADER)) {
-		if (!g_usb_device_set_interface_alt(usb_device,
-						    (gint)fu_dfu_device_get_interface(device),
-						    (gint)priv->alt_setting,
-						    &error_local)) {
+		if (!fu_usb_device_set_interface_alt(FU_USB_DEVICE(device),
+						     fu_dfu_device_get_interface(device),
+						     priv->alt_setting,
+						     &error_local)) {
 			g_set_error(error,
 				    FWUPD_ERROR,
 				    FWUPD_ERROR_NOT_SUPPORTED,
@@ -623,9 +626,9 @@ fu_dfu_target_setup(FuDfuTarget *self, GError **error)
 
 	/* get string */
 	if (priv->alt_idx != 0x00 && fu_device_get_logical_id(FU_DEVICE(self)) == NULL) {
-		GUsbDevice *usb_device = fu_usb_device_get_dev(FU_USB_DEVICE(device));
 		g_autofree gchar *alt_name = NULL;
-		alt_name = g_usb_device_get_string_descriptor(usb_device, priv->alt_idx, NULL);
+		alt_name =
+		    fu_usb_device_get_string_descriptor(FU_USB_DEVICE(device), priv->alt_idx, NULL);
 		fu_device_set_logical_id(FU_DEVICE(self), alt_name);
 	}
 
@@ -640,12 +643,13 @@ fu_dfu_target_setup(FuDfuTarget *self, GError **error)
 	/* add a dummy entry */
 	if (priv->sectors->len == 0) {
 		FuDfuSector *sector;
-		sector = fu_dfu_sector_new(0x0, /* addr */
-					   0x0, /* size */
-					   0x0, /* size_left */
-					   0x0, /* zone */
-					   0x0, /* number */
-					   DFU_SECTOR_CAP_READABLE | DFU_SECTOR_CAP_WRITEABLE);
+		sector =
+		    fu_dfu_sector_new(0x0, /* addr */
+				      0x0, /* size */
+				      0x0, /* size_left */
+				      0x0, /* zone */
+				      0x0, /* number */
+				      FU_DFU_SECTOR_CAP_READABLE | FU_DFU_SECTOR_CAP_WRITEABLE);
 		g_debug("no UM0424 sector description in %s",
 			fu_device_get_logical_id(FU_DEVICE(self)));
 		g_ptr_array_add(priv->sectors, sector);
@@ -658,30 +662,34 @@ fu_dfu_target_setup(FuDfuTarget *self, GError **error)
 gboolean
 fu_dfu_target_download_chunk(FuDfuTarget *self,
 			     guint16 index,
-			     GBytes *bytes,
+			     GByteArray *buf,
+			     guint timeout_ms,
 			     FuProgress *progress,
 			     GError **error)
 {
 	FuDfuDevice *device = FU_DFU_DEVICE(fu_device_get_proxy(FU_DEVICE(self)));
-	GUsbDevice *usb_device = fu_usb_device_get_dev(FU_USB_DEVICE(device));
 	g_autoptr(GError) error_local = NULL;
 	gsize actual_length;
 
+	/* fall back to default */
+	if (timeout_ms == 0)
+		timeout_ms = fu_dfu_device_get_timeout(device);
+
 	/* low level packet debugging */
-	fu_dump_bytes(G_LOG_DOMAIN, "Message", bytes);
-	if (!g_usb_device_control_transfer(usb_device,
-					   G_USB_DEVICE_DIRECTION_HOST_TO_DEVICE,
-					   G_USB_DEVICE_REQUEST_TYPE_CLASS,
-					   G_USB_DEVICE_RECIPIENT_INTERFACE,
-					   FU_DFU_REQUEST_DNLOAD,
-					   index,
-					   fu_dfu_device_get_interface(device),
-					   (guint8 *)g_bytes_get_data(bytes, NULL),
-					   g_bytes_get_size(bytes),
-					   &actual_length,
-					   fu_dfu_device_get_timeout(device),
-					   NULL,
-					   &error_local)) {
+	fu_dump_raw(G_LOG_DOMAIN, "Message", buf->data, buf->len);
+	if (!fu_usb_device_control_transfer(FU_USB_DEVICE(device),
+					    FU_USB_DIRECTION_HOST_TO_DEVICE,
+					    FU_USB_REQUEST_TYPE_CLASS,
+					    FU_USB_RECIPIENT_INTERFACE,
+					    FU_DFU_REQUEST_DNLOAD,
+					    index,
+					    fu_dfu_device_get_interface(device),
+					    buf->data,
+					    buf->len,
+					    &actual_length,
+					    timeout_ms,
+					    NULL,
+					    &error_local)) {
 		/* refresh the error code */
 		fu_dfu_device_error_fixup(device, &error_local);
 		g_set_error(error,
@@ -692,14 +700,15 @@ fu_dfu_target_download_chunk(FuDfuTarget *self,
 		return FALSE;
 	}
 
-	/* for STM32 devices, the action only occurs when we do GetStatus */
+	/* for STM32 devices, the action only occurs when we do GetStatus --
+	 * and it can take a long time to complete! */
 	if (fu_dfu_device_get_version(device) == FU_DFU_FIRMARE_VERSION_DFUSE) {
-		if (!fu_dfu_device_refresh(device, error))
+		if (!fu_dfu_device_refresh(device, 35000, error))
 			return FALSE;
 	}
 
 	/* wait for the device to write contents to the EEPROM */
-	if (g_bytes_get_size(bytes) == 0 && fu_dfu_device_get_download_timeout(device) > 0)
+	if (buf->len == 0 && fu_dfu_device_get_download_timeout(device) > 0)
 		fu_progress_set_status(progress, FWUPD_STATUS_DEVICE_BUSY);
 	if (fu_dfu_device_get_download_timeout(device) > 0) {
 		g_debug("sleeping for %ums…", fu_dfu_device_get_download_timeout(device));
@@ -712,7 +721,7 @@ fu_dfu_target_download_chunk(FuDfuTarget *self,
 		return FALSE;
 	}
 
-	g_assert_cmpint(actual_length, ==, g_bytes_get_size(bytes));
+	g_assert_cmpint(actual_length, ==, buf->len);
 	return TRUE;
 }
 
@@ -724,7 +733,6 @@ fu_dfu_target_upload_chunk(FuDfuTarget *self,
 			   GError **error)
 {
 	FuDfuDevice *device = FU_DFU_DEVICE(fu_device_get_proxy(FU_DEVICE(self)));
-	GUsbDevice *usb_device = fu_usb_device_get_dev(FU_USB_DEVICE(device));
 	g_autoptr(GError) error_local = NULL;
 	guint8 *buf;
 	gsize actual_length;
@@ -734,19 +742,19 @@ fu_dfu_target_upload_chunk(FuDfuTarget *self,
 		buf_sz = (gsize)fu_dfu_device_get_transfer_size(device);
 
 	buf = g_new0(guint8, buf_sz);
-	if (!g_usb_device_control_transfer(usb_device,
-					   G_USB_DEVICE_DIRECTION_DEVICE_TO_HOST,
-					   G_USB_DEVICE_REQUEST_TYPE_CLASS,
-					   G_USB_DEVICE_RECIPIENT_INTERFACE,
-					   FU_DFU_REQUEST_UPLOAD,
-					   index,
-					   fu_dfu_device_get_interface(device),
-					   buf,
-					   buf_sz,
-					   &actual_length,
-					   fu_dfu_device_get_timeout(device),
-					   NULL,
-					   &error_local)) {
+	if (!fu_usb_device_control_transfer(FU_USB_DEVICE(device),
+					    FU_USB_DIRECTION_DEVICE_TO_HOST,
+					    FU_USB_REQUEST_TYPE_CLASS,
+					    FU_USB_RECIPIENT_INTERFACE,
+					    FU_DFU_REQUEST_UPLOAD,
+					    index,
+					    fu_dfu_device_get_interface(device),
+					    buf,
+					    buf_sz,
+					    &actual_length,
+					    fu_dfu_device_get_timeout(device),
+					    NULL,
+					    &error_local)) {
 		/* refresh the error code */
 		fu_dfu_device_error_fixup(device, &error_local);
 		g_set_error(error,
@@ -831,6 +839,8 @@ fu_dfu_target_upload_element_dfu(FuDfuTarget *self,
 		/* keep a sum of all the chunks */
 		chunk_size = (guint32)g_bytes_get_size(chunk_tmp);
 		total_size += chunk_size;
+		if (total_size > maximum_size)
+			break;
 
 		/* add to array */
 		g_debug("got #%04x chunk of size %" G_GUINT32_FORMAT, idx, chunk_size);
@@ -1050,27 +1060,27 @@ fu_dfu_target_download_element_dfu(FuDfuTarget *self,
 	for (guint32 i = 0; i < nr_chunks + 1; i++) {
 		gsize length;
 		guint32 offset;
-		g_autoptr(GBytes) bytes_tmp = NULL;
+		g_autoptr(GByteArray) buf = g_byte_array_new();
 
 		/* calculate the offset into the chunk data */
 		offset = i * transfer_size;
 
 		/* we have to write one final zero-sized chunk for EOF */
 		if (i < nr_chunks) {
+			g_autoptr(GBytes) bytes_tmp = NULL;
 			length = g_bytes_get_size(bytes) - offset;
 			if (length > transfer_size)
 				length = transfer_size;
 			bytes_tmp = fu_bytes_new_offset(bytes, offset, length, error);
 			if (bytes_tmp == NULL)
 				return FALSE;
-		} else {
-			bytes_tmp = g_bytes_new(NULL, 0);
+			fu_byte_array_append_bytes(buf, bytes_tmp);
 		}
-		g_debug("writing #%04x chunk of size %" G_GSIZE_FORMAT,
-			i,
-			g_bytes_get_size(bytes_tmp));
-		if (!fu_dfu_target_download_chunk(self, i, bytes_tmp, progress, error))
+		g_debug("writing #%04x chunk of size 0x%x", i, buf->len);
+		if (!fu_dfu_target_download_chunk(self, i, buf, 0, progress, error)) {
+			g_prefix_error(error, "failed to write chunk %u: ", i);
 			return FALSE;
+		}
 
 		/* update UI */
 		fu_progress_set_percentage_full(progress, i + 1, nr_chunks + 1);
@@ -1210,7 +1220,7 @@ fu_dfu_target_download(FuDfuTarget *self,
 	fu_progress_set_steps(progress, chunks->len);
 	for (guint i = 0; i < chunks->len; i++) {
 		FuChunk *chk = g_ptr_array_index(chunks, i);
-		g_debug("downloading chunk at 0x%04x", fu_chunk_get_address(chk));
+		g_debug("downloading chunk at 0x%04x", (guint)fu_chunk_get_address(chk));
 
 		/* auto-detect missing firmware address -- this assumes
 		 * that the first target is the main program memory and that
@@ -1263,7 +1273,7 @@ static void
 fu_dfu_target_class_init(FuDfuTargetClass *klass)
 {
 	GObjectClass *object_class = G_OBJECT_CLASS(klass);
-	FuDeviceClass *klass_device = FU_DEVICE_CLASS(klass);
-	klass_device->to_string = fu_dfu_target_to_string;
+	FuDeviceClass *device_class = FU_DEVICE_CLASS(klass);
+	device_class->to_string = fu_dfu_target_to_string;
 	object_class->finalize = fu_dfu_target_finalize;
 }

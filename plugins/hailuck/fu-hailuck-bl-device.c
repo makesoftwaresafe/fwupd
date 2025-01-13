@@ -1,12 +1,10 @@
 /*
- * Copyright (C) 2020 Richard Hughes <richard@hughsie.com>
+ * Copyright 2020 Richard Hughes <richard@hughsie.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #include "config.h"
-
-#include <fwupdplugin.h>
 
 #include "fu-hailuck-bl-device.h"
 #include "fu-hailuck-common.h"
@@ -34,7 +32,7 @@ fu_hailuck_bl_device_attach(FuDevice *device, FuProgress *progress, GError **err
 				      FU_HID_DEVICE_FLAG_IS_FEATURE,
 				      error))
 		return FALSE;
-	if (!g_usb_device_reset(fu_usb_device_get_dev(FU_USB_DEVICE(device)), error))
+	if (!fu_usb_device_reset(FU_USB_DEVICE(device), error))
 		return FALSE;
 	fu_device_add_flag(device, FWUPD_DEVICE_FLAG_WAIT_FOR_REPLUG);
 	return TRUE;
@@ -128,7 +126,7 @@ fu_hailuck_bl_device_dump_firmware(FuDevice *device, FuProgress *progress, GErro
 	}
 
 	/* success */
-	return g_byte_array_free_to_bytes(g_steal_pointer(&fwbuf));
+	return g_bytes_new(fwbuf->data, fwbuf->len);
 }
 
 static gboolean
@@ -209,10 +207,10 @@ fu_hailuck_bl_device_write_firmware(FuDevice *device,
 				    GError **error)
 {
 	FuHailuckBlDevice *self = FU_HAILUCK_BL_DEVICE(device);
-	FuChunk *chk0;
 	g_autoptr(GBytes) fw = NULL;
 	g_autoptr(GBytes) fw_new = NULL;
-	g_autoptr(GPtrArray) chunks = NULL;
+	g_autoptr(FuChunk) chk0 = NULL;
+	g_autoptr(FuChunkArray) chunks = NULL;
 	g_autofree guint8 *chk0_data = NULL;
 
 	/* progress */
@@ -238,10 +236,15 @@ fu_hailuck_bl_device_write_firmware(FuDevice *device,
 		return FALSE;
 
 	/* build packets */
-	chunks = fu_chunk_array_new_from_bytes(fw, 0x0, 0x00, 2048);
+	chunks = fu_chunk_array_new_from_bytes(fw,
+					       FU_CHUNK_ADDR_OFFSET_NONE,
+					       FU_CHUNK_PAGESZ_NONE,
+					       2048);
 
 	/* intentionally corrupt first chunk so that CRC fails */
-	chk0 = g_ptr_array_index(chunks, 0);
+	chk0 = fu_chunk_array_index(chunks, 0, error);
+	if (chk0 == NULL)
+		return FALSE;
 	chk0_data = fu_memdup_safe(fu_chunk_get_data(chk0), fu_chunk_get_data_sz(chk0), error);
 	if (chk0_data == NULL)
 		return FALSE;
@@ -250,8 +253,13 @@ fu_hailuck_bl_device_write_firmware(FuDevice *device,
 		return FALSE;
 
 	/* send the rest of the chunks */
-	for (guint i = 1; i < chunks->len; i++) {
-		FuChunk *chk = g_ptr_array_index(chunks, i);
+	for (guint i = 1; i < fu_chunk_array_length(chunks); i++) {
+		g_autoptr(FuChunk) chk = NULL;
+
+		/* prepare chunk */
+		chk = fu_chunk_array_index(chunks, i, error);
+		if (chk == NULL)
+			return FALSE;
 		if (!fu_hailuck_bl_device_write_block(self,
 						      fu_chunk_get_data(chk),
 						      fu_chunk_get_data_sz(chk),
@@ -259,7 +267,7 @@ fu_hailuck_bl_device_write_firmware(FuDevice *device,
 			return FALSE;
 		fu_progress_set_percentage_full(fu_progress_get_child(progress),
 						i + 1,
-						chunks->len);
+						fu_chunk_array_length(chunks));
 	}
 	fu_progress_step_done(progress);
 
@@ -290,7 +298,7 @@ fu_hailuck_bl_device_init(FuHailuckBlDevice *self)
 	fu_device_add_flag(FU_DEVICE(self), FWUPD_DEVICE_FLAG_INTERNAL);
 	fu_device_add_flag(FU_DEVICE(self), FWUPD_DEVICE_FLAG_UPDATABLE);
 	fu_device_add_flag(FU_DEVICE(self), FWUPD_DEVICE_FLAG_CAN_VERIFY_IMAGE);
-	fu_device_add_internal_flag(FU_DEVICE(self), FU_DEVICE_INTERNAL_FLAG_REPLUG_MATCH_GUID);
+	fu_device_add_private_flag(FU_DEVICE(self), FU_DEVICE_PRIVATE_FLAG_REPLUG_MATCH_GUID);
 	fu_device_add_icon(FU_DEVICE(self), "input-keyboard");
 	fu_hid_device_add_flag(FU_HID_DEVICE(self), FU_HID_DEVICE_FLAG_NO_KERNEL_REBIND);
 	fu_device_set_remove_delay(FU_DEVICE(self), FU_DEVICE_REMOVE_DELAY_RE_ENUMERATE);
@@ -299,9 +307,9 @@ fu_hailuck_bl_device_init(FuHailuckBlDevice *self)
 static void
 fu_hailuck_bl_device_class_init(FuHailuckBlDeviceClass *klass)
 {
-	FuDeviceClass *klass_device = FU_DEVICE_CLASS(klass);
-	klass_device->dump_firmware = fu_hailuck_bl_device_dump_firmware;
-	klass_device->write_firmware = fu_hailuck_bl_device_write_firmware;
-	klass_device->attach = fu_hailuck_bl_device_attach;
-	klass_device->probe = fu_hailuck_bl_device_probe;
+	FuDeviceClass *device_class = FU_DEVICE_CLASS(klass);
+	device_class->dump_firmware = fu_hailuck_bl_device_dump_firmware;
+	device_class->write_firmware = fu_hailuck_bl_device_write_firmware;
+	device_class->attach = fu_hailuck_bl_device_attach;
+	device_class->probe = fu_hailuck_bl_device_probe;
 }

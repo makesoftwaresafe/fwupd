@@ -1,6 +1,7 @@
-if get_option('plugin_synaptics_mst').require(gudev.found(),
-    error_message: 'gudev is needed for plugin_synaptics_mst').allowed()
+if get_option('plugin_synaptics_mst').require(enable_udev,
+    error_message: 'udev is needed for plugin_synaptics_mst').allowed()
 cargs = ['-DG_LOG_DOMAIN="FuPluginSynapticsMST"']
+plugins += {meson.current_source_dir().split('/')[-1]: true}
 
 plugin_quirks += files('synaptics-mst.quirk')
 
@@ -11,7 +12,6 @@ plugin_builtin_synaptics_mst = static_library('fu_plugin_synaptics_mst',
   sources: [
     'fu-synaptics-mst-plugin.c',
     'fu-synaptics-mst-common.c',
-    'fu-synaptics-mst-connection.c',
     'fu-synaptics-mst-device.c',
     'fu-synaptics-mst-firmware.c',      # fuzzing
   ],
@@ -34,6 +34,7 @@ if get_option('tests')
   env.set('FWUPD_DATADIR_QUIRKS', meson.current_source_dir())
   e = executable(
     'synaptics-mst-self-test',
+    rustgen.process('fu-synaptics-mst.rs'),
     sources: [
       'fu-self-test.c',
     ],

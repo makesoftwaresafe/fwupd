@@ -1,8 +1,8 @@
 /*
- * Copyright (C) 2018 Richard Hughes <richard@hughsie.com>
- * Copyright (C) 2020 Mario Limonciello <mario.limonciello@dell.com>
+ * Copyright 2018 Richard Hughes <richard@hughsie.com>
+ * Copyright 2020 Mario Limonciello <mario.limonciello@dell.com>
  *
- * SPDX-License-Identifier: LGPL-2.1+
+ * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
 #pragma once
@@ -28,3 +28,5 @@ gboolean
 fu_thunderbolt_device_check_authorized(FuThunderboltDevice *self, GError **error);
 void
 fu_thunderbolt_device_set_auth_method(FuThunderboltDevice *self, const gchar *auth_method);
+void
+fu_thunderbolt_device_set_retries(FuThunderboltDevice *self, guint retries);

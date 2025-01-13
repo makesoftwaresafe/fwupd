@@ -19,14 +19,32 @@ This plugin supports the following protocol ID:
 
 These devices use the standard USB DeviceInstanceId values, e.g.
 
-* `USB\VID_10A5&PID_FFE0&REV_0001`
 * `USB\VID_10A5&PID_FFE0`
-* `USB\VID_10A5`
 
 ## Update Behavior
 
 The firmware is deployed when the device is in normal runtime mode, and the
 device will reset when the new firmware has been written.
+
+## Quirk Use
+
+This plugin uses the following plugin-specific quirks:
+
+### `Flags=moh-device`
+
+Device is a MOH device
+
+### `Flags=rts`
+
+Device is a RTS device.
+
+### `Flags=legacy-dfu`
+
+Device supports legacy DFU mode.
+
+### `Flags=lenfy`
+
+Device is a LENFY MOH device.
 
 ## Vendor ID Security
 
@@ -39,3 +57,10 @@ This plugin requires read/write access to `/dev/bus/usb`.
 ## Version Considerations
 
 This plugin has been available since fwupd version `1.8.6`.
+
+## Owners
+
+Anyone can submit a pull request to modify this plugin, but the following people should be
+consulted before making major or functional changes:
+
+* Jim Zhang: @jimzhang2

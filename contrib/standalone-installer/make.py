@@ -1,8 +1,8 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 #
-# Copyright (C) 2017 Dell, Inc.
+# Copyright 2017 Dell, Inc.
 #
-# SPDX-License-Identifier: LGPL-2.1+
+# SPDX-License-Identifier: LGPL-2.1-or-later
 #
 from base64 import b64encode
 import io
@@ -150,7 +150,7 @@ if __name__ == "__main__":
     with tempfile.TemporaryDirectory(prefix="fwupd") as directory:
         if local:
             if not os.path.exists(local):
-                error("%s doesn't exist" % local)
+                error(f"{local} doesn't exist")
             if not os.path.isdir(local):
                 shutil.copy(local, directory)
             else:

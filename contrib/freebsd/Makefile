@@ -18,11 +18,10 @@ BUILD_DEPENDS=	gi-docgen:textproc/gi-docgen \
 		${PYTHON_PKGNAMEPREFIX}gobject3>0:devel/py-gobject3@${PY_FLAVOR}
 LIB_DEPENDS=	libcurl.so:ftp/curl \
 		libefiboot.so:devel/libefiboot \
-		libgcab-1.0.so:archivers/gcab \
 		libgnutls.so:security/gnutls \
 		libgpg-error.so:security/libgpg-error \
 		libgpgme.so:security/gpgme \
-		libgusb.so:devel/libgusb \
+		libusb.so:devel/libusb \
 		libjcat.so:textproc/libjcat \
 		libjson-glib-1.0.so:devel/json-glib \
 		libprotobuf-c.so:devel/protobuf-c \
@@ -41,13 +40,11 @@ USE_LDCONFIG=	yes
 
 SHEBANG_GLOB=	*.py
 
-MESON_ARGS=	-Dgudev=disabled \
+MESON_ARGS=	-Dudev=disabled \
 		-Dplugin_intel_me=false \
 		-Dpolkit=disabled \
 		-Dsystemd=disabled \
-		-Doffline=false \
 		-Dtests=false \
-		-Ddocs=enabled \
-		-Defi_binary=false
+		-Ddocs=enabled
 
 .include <bsd.port.mk>
