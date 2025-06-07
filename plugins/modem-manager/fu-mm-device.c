@@ -145,10 +145,13 @@ static void
 fu_mm_device_add_instance_id(FuMmDevice *self, const gchar *device_id)
 {
 	if (g_pattern_match_simple("???\\VID_????", device_id)) {
-		g_autofree gchar *vendor_id = g_strdup_printf("USB:0x%s", device_id + 8);
+		g_autofree gchar *prefix = g_strndup(device_id, 3);
+		g_autofree gchar *vendor_id = NULL;
+
 		fu_device_add_instance_id_full(FU_DEVICE(self),
 					       device_id,
 					       FU_DEVICE_INSTANCE_FLAG_QUIRKS);
+		vendor_id = g_strdup_printf("%s:0x%s", prefix, device_id + 8);
 		fu_device_add_vendor_id(FU_DEVICE(self), vendor_id);
 		return;
 	}
@@ -167,6 +170,11 @@ fu_mm_device_add_instance_id(FuMmDevice *self, const gchar *device_id)
 	if (g_pattern_match_simple("???\\VID_????&PID_????&REV_????&CARRIER_*", device_id)) {
 		if (!fu_device_has_private_flag(FU_DEVICE(self), FU_MM_DEVICE_FLAG_USE_BRANCH))
 			fu_device_add_instance_id(FU_DEVICE(self), device_id);
+		return;
+	}
+	if (g_pattern_match_simple("???\\SSVID_????&SSPID_????", device_id) ||
+	    g_pattern_match_simple("???\\SSVID_????&SSPID_????&NAME_*", device_id)) {
+		fu_device_add_instance_id(FU_DEVICE(self), device_id);
 		return;
 	}
 	if (g_pattern_match_simple("???\\SSVID_????&SSPID_????&REV_????&CARRIER_*", device_id)) {

@@ -690,20 +690,21 @@ fu_util_get_updates(FuUtilPrivate *priv, gchar **values, GError **error)
 		devices = fu_engine_get_devices(priv->engine, error);
 		if (devices == NULL)
 			return FALSE;
-	} else if (g_strv_length(values) == 1) {
-		FuDevice *device;
-		device = fu_util_get_device(priv, values[0], error);
-		if (device == NULL)
-			return FALSE;
-		devices = g_ptr_array_new_with_free_func((GDestroyNotify)g_object_unref);
-		g_ptr_array_add(devices, device);
 	} else {
-		g_set_error_literal(error,
-				    FWUPD_ERROR,
-				    FWUPD_ERROR_INVALID_ARGS,
-				    "Invalid arguments");
-		return FALSE;
-	}
+		devices = g_ptr_array_new_with_free_func((GDestroyNotify)g_object_unref);
+		for (guint idx = 0; idx < g_strv_length(values); idx++) {
+			FuDevice *device = fu_util_get_device(priv, values[idx], error);
+			if (device == NULL) {
+				g_set_error(error,
+					    FWUPD_ERROR,
+					    FWUPD_ERROR_INVALID_ARGS,
+					    "'%s' is not a valid GUID nor DEVICE-ID",
+					    values[idx]);
+				return FALSE;
+			}
+			g_ptr_array_add(devices, device);
+		}
+        }
 
 	/* not for human consumption */
 	if (priv->as_json)
@@ -1543,7 +1544,7 @@ fu_util_install(FuUtilPrivate *priv, gchar **values, GError **error)
 	}
 
 	/* success */
-	return fu_util_prompt_complete(priv->console, priv->completion_flags, TRUE, error);
+	return TRUE;
 }
 
 static gboolean
@@ -4927,7 +4928,7 @@ fu_util_build_cabinet(FuUtilPrivate *priv, gchar **values, GError **error)
 	if (!fu_firmware_parse_bytes(FU_FIRMWARE(cab_file),
 				     cab_blob,
 				     0x0,
-				     FU_FIRMWARE_PARSE_FLAG_NONE,
+				     FU_FIRMWARE_PARSE_FLAG_CACHE_BLOB,
 				     error))
 		return FALSE;
 
@@ -5269,7 +5270,8 @@ main(int argc, char *argv[])
 			      /* TRANSLATORS: command argument: uppercase, spaces->dashes */
 			      _("[DEVICE-ID|GUID]"),
 			      /* TRANSLATORS: command description */
-			      _("Gets the list of updates for connected hardware"),
+			      _("Gets the list of updates for all specified devices, or all "
+				"devices if unspecified"),
 			      fu_util_get_updates);
 	fu_util_cmd_array_add(cmd_array,
 			      "get-devices,get-topology",
