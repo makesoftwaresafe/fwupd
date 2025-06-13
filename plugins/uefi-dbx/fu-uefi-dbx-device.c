@@ -201,7 +201,10 @@ fu_uefi_dbx_device_probe(FuDevice *device, GError **error)
 	g_autoptr(GPtrArray) sigs = NULL;
 
 	/* use each of the certificates in the KEK to generate the GUIDs */
-	kek = fu_device_read_firmware(device, progress, error);
+	kek = fu_device_read_firmware(device,
+				      progress,
+				      FU_FIRMWARE_PARSE_FLAG_IGNORE_CHECKSUM,
+				      error);
 	if (kek == NULL) {
 		g_prefix_error(error, "failed to parse KEK: ");
 		return FALSE;
@@ -232,19 +235,6 @@ fu_uefi_dbx_device_probe(FuDevice *device, GError **error)
 		fu_device_add_flag(device, FWUPD_DEVICE_FLAG_AFFECTS_FDE);
 
 	return fu_uefi_dbx_device_ensure_checksum(self, error);
-}
-
-static void
-fu_uefi_dbx_device_report_metadata_pre(FuDevice *device, GHashTable *metadata)
-{
-	FuContext *ctx = fu_device_get_context(device);
-	FuEfivars *efivars = fu_context_get_efivars(ctx);
-	guint64 nvram_total = fu_efivars_space_used(efivars, NULL);
-	if (nvram_total != G_MAXUINT64) {
-		g_hash_table_insert(metadata,
-				    g_strdup("EfivarsNvramUsed"),
-				    g_strdup_printf("%" G_GUINT64_FORMAT, nvram_total));
-	}
 }
 
 static void
@@ -316,7 +306,6 @@ fu_uefi_dbx_device_class_init(FuUefiDbxDeviceClass *klass)
 	device_class->write_firmware = fu_uefi_dbx_device_write_firmware;
 	device_class->prepare_firmware = fu_uefi_dbx_device_prepare_firmware;
 	device_class->set_progress = fu_uefi_dbx_device_set_progress;
-	device_class->report_metadata_pre = fu_uefi_dbx_device_report_metadata_pre;
 	device_class->cleanup = fu_uefi_dbx_device_cleanup;
 
 	object_class->finalize = fu_uefi_dbx_device_finalize;

@@ -27,7 +27,10 @@ fu_uefi_kek_device_probe(FuDevice *device, GError **error)
 		return FALSE;
 
 	/* add each subdevice */
-	siglist = fu_device_read_firmware(device, progress, error);
+	siglist = fu_device_read_firmware(device,
+					  progress,
+					  FU_FIRMWARE_PARSE_FLAG_IGNORE_CHECKSUM,
+					  error);
 	if (siglist == NULL) {
 		g_prefix_error(error, "failed to parse kek: ");
 		return FALSE;
@@ -40,6 +43,8 @@ fu_uefi_kek_device_probe(FuDevice *device, GError **error)
 			continue;
 		x509_device = fu_efi_x509_device_new(ctx, FU_EFI_X509_SIGNATURE(sig));
 		fu_device_set_physical_id(FU_DEVICE(x509_device), "kek");
+		fu_device_add_flag(FU_DEVICE(x509_device), FWUPD_DEVICE_FLAG_AFFECTS_FDE);
+		fu_device_add_flag(FU_DEVICE(x509_device), FWUPD_DEVICE_FLAG_USABLE_DURING_UPDATE);
 		fu_device_set_proxy(FU_DEVICE(x509_device), device);
 		fu_device_add_child(device, FU_DEVICE(x509_device));
 	}

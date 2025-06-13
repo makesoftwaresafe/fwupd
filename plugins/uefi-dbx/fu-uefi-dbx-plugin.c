@@ -19,9 +19,12 @@ struct _FuUefiDbxPlugin {
 
 G_DEFINE_TYPE(FuUefiDbxPlugin, fu_uefi_dbx_plugin, FU_TYPE_PLUGIN)
 
+#define FU_UEFI_DBX_EFIVAR_REQUIRED_SIZE 30 * 1024 /* bytes */
+
 static gboolean
 fu_uefi_dbx_plugin_device_created(FuPlugin *plugin, FuDevice *device, GError **error)
 {
+	FuContext *ctx = fu_plugin_get_context(plugin);
 	FuUefiDbxPlugin *self = FU_UEFI_DBX_PLUGIN(plugin);
 	gboolean inhibited = FALSE;
 
@@ -30,6 +33,24 @@ fu_uefi_dbx_plugin_device_created(FuPlugin *plugin, FuDevice *device, GError **e
 				  "no-dbx",
 				  "System firmware cannot accept DBX updates");
 		inhibited = TRUE;
+	}
+
+	/*
+	 * NOTE: What we really want to do here is check if a *contiguous* dbx-sized block can be
+	 * written, but on most machines this causes an SMI which causes all cores to halt.
+	 *
+	 * On my desktop this causes **ALL** CPU processes to stop for ~1s, which is clearly
+	 * unacceptable to do on millions of machines at every boot.
+	 *
+	 * Instead, check for free space at least as big as the dbx, plus a little extra.
+	 */
+	if (!inhibited) {
+		g_autoptr(GError) error_local = NULL;
+		if (!fu_context_efivars_check_free_space(ctx,
+							 FU_UEFI_DBX_EFIVAR_REQUIRED_SIZE,
+							 &error_local)) {
+			fu_device_inhibit(FU_DEVICE(device), "no-space", error_local->message);
+		}
 	}
 
 	if (self->snapd_notifier != NULL) {
@@ -86,6 +107,7 @@ fu_uefi_dbx_plugin_constructed(GObject *obj)
 	FuContext *ctx = fu_plugin_get_context(plugin);
 
 	fu_plugin_add_rule(plugin, FU_PLUGIN_RULE_METADATA_SOURCE, "uefi_capsule");
+	fu_plugin_add_rule(plugin, FU_PLUGIN_RULE_METADATA_SOURCE, "uefi_pk");
 	fu_plugin_add_firmware_gtype(plugin, NULL, FU_TYPE_EFI_SIGNATURE_LIST);
 	fu_plugin_add_device_gtype(plugin, FU_TYPE_UEFI_DBX_DEVICE);
 
