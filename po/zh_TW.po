@@ -12,7 +12,7 @@ msgstr ""
 "Project-Id-Version: fwupd\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-04-14 13:50+0100\n"
-"PO-Revision-Date: 2026-04-23 06:03+0000\n"
+"PO-Revision-Date: 2026-04-23 15:45+0000\n"
 "Last-Translator: UDP <udp@users.noreply.hosted.weblate.org>\n"
 "Language-Team: Chinese (Traditional Han script) <https://hosted.weblate.org/projects/fwupd/fwupd/zh_Hant/>\n"
 "Language: zh_TW\n"
@@ -59,7 +59,7 @@ msgstr "停止 fwupd 服務"
 
 #. TRANSLATORS: this is the PolicyKit modal dialog
 msgid "Authentication is required to stop the firmware update service"
-msgstr ""
+msgstr "必須先通過身份驗證才能停止韌體更新服務"
 
 msgid "Install signed system firmware"
 msgstr "安裝已簽署的系統韌體"
@@ -76,7 +76,7 @@ msgstr "安裝已簽署的舊版系統韌體"
 
 #. TRANSLATORS: this is the PolicyKit modal dialog
 msgid "Authentication is required to downgrade the firmware on this machine"
-msgstr "必須先通過身份驗證才能降級這臺機器上的韌體"
+msgstr "必須先通過身份驗證才能降級此機器的韌體"
 
 msgid "Install old version of unsigned system firmware"
 msgstr "安裝未簽署的舊版系統韌體"
@@ -124,7 +124,7 @@ msgid "Authentication is required to switch to the new firmware version"
 msgstr "必須先通過身份驗證才能切換到新版韌體"
 
 msgid "Update the stored device verification information"
-msgstr "更新儲存的裝置核驗資訊"
+msgstr "更新儲存的裝置驗證資訊"
 
 #. TRANSLATORS: this is the PolicyKit modal dialog
 msgid "Authentication is required to update the stored checksums for the device"
@@ -209,7 +209,7 @@ msgstr ""
 
 #. TRANSLATORS: this is shown when updating the firmware after the reboot
 msgid "Installing firmware update…"
-msgstr "安裝韌體更新中…"
+msgstr "正在安裝韌體更新…"
 
 #. TRANSLATORS: command line option
 msgid "Show extra debugging information"
@@ -278,7 +278,7 @@ msgstr "此程式僅有 root 身份才能正常運作"
 
 #. TRANSLATORS: user did not include a filename parameter
 msgid "Filename required"
-msgstr ""
+msgstr "需要檔案名稱"
 
 #. TRANSLATORS: reading existing dbx from the system
 msgid "Parsing system dbx…"
@@ -298,12 +298,12 @@ msgstr ""
 
 #. TRANSLATORS: ESP refers to the EFI System Partition
 msgid "Validating ESP contents…"
-msgstr "核驗 ESP 內容中…"
+msgstr "正在驗證 ESP 內容…"
 
 #. TRANSLATORS: something with a blocked hash exists
 #. * in the users ESP -- which would be bad!
 msgid "Failed to validate ESP contents"
-msgstr "無法核驗 ESP 內容"
+msgstr "無法驗證 ESP 內容"
 
 #. TRANSLATORS: actually sending the update to the hardware
 msgid "Applying update…"
@@ -324,13 +324,13 @@ msgstr "未指定動作！"
 #. TRANSLATORS: the user isn't reading the question
 #, c-format
 msgid "Please enter a number from 0 to %u:"
-msgstr ""
+msgstr "請輸入從 0 到 %u 的數字:"
 
 #. TRANSLATORS: the user isn't reading the question
 #. -- %1 is 'Y' and %2 is 'N'
 #, c-format
 msgid "Please enter either %s or %s:"
-msgstr ""
+msgstr "請輸入 %s 或 %s:"
 
 #. TRANSLATORS: daemon is inactive
 msgid "Idle…"
@@ -362,7 +362,7 @@ msgstr "抹除中…"
 
 #. TRANSLATORS: verifying we wrote the firmware correctly
 msgid "Verifying…"
-msgstr "核驗中…"
+msgstr "驗證中…"
 
 #. TRANSLATORS: scheduling an update to be done on the next boot
 msgid "Scheduling…"
@@ -2805,7 +2805,7 @@ msgstr "裝置在更新完成後不會再次出現"
 
 #. TRANSLATORS: Device supports some form of checksum verification
 msgid "Cryptographic hash verification is available"
-msgstr "密碼學雜湊核驗可以使用"
+msgstr "密碼學雜湊驗證可以使用"
 
 #. TRANSLATORS: Device supports a safety mechanism for flashing
 msgid "Device stages updates"
@@ -3615,7 +3615,7 @@ msgstr "您是否瞭解切換韌體分支的後果？"
 
 #. TRANSLATORS: the platform secret is stored in the PCRx registers on the TPM
 msgid "Some of the platform secrets may be invalidated when updating this firmware."
-msgstr "有些平臺暗記可能在更新此韌體時無法通過核驗。"
+msgstr "有些平臺秘密可能在更新此韌體時無法通過驗證。"
 
 #. TRANSLATORS: 'recovery key' here refers to a code, rather than a physical
 #. metal thing
@@ -3633,7 +3633,7 @@ msgstr "已偵測到全磁碟加密"
 
 #. TRANSLATORS: unsupported build of the package
 msgid "This package has not been validated, it may not work properly."
-msgstr "此軟體包尚未核驗，而可能不會正常運作。"
+msgstr "此套件尚未驗證，而可能不會正常運作。"
 
 #. TRANSLATORS: a remote here is like a 'repo' or software source
 msgid "Enable new remote?"
