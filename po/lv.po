@@ -7,7 +7,7 @@ msgstr ""
 "Project-Id-Version: fwupd\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-04-23 08:04+0100\n"
-"PO-Revision-Date: 2026-05-08 04:11+0000\n"
+"PO-Revision-Date: 2026-05-09 05:11+0000\n"
 "Last-Translator: \"ℂ𝕠𝕠𝕠𝕝 (𝕘𝕚𝕥𝕙𝕦𝕓.𝕔𝕠𝕞/ℂ𝕠𝕠𝕠𝕝)\" <coool@mail.lv>\n"
 "Language-Team: Latvian <https://hosted.weblate.org/projects/fwupd/fwupd/lv/>\n"
 "Language: lv\n"
@@ -15,7 +15,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=3; plural=(n % 10 == 0 || n % 100 >= 11 && n % 100 <= 19) ? 0 : ((n % 10 == 1 && n % 100 != 11) ? 1 : 2);\n"
-"X-Generator: Weblate 5.17.1\n"
+"X-Generator: Weblate 2026.5-dev\n"
 
 #: data/remotes.d/lvfs.metainfo.xml:6
 msgid "Linux Vendor Firmware Service (stable firmware)"
@@ -4297,7 +4297,7 @@ msgstr ""
 #. TRANSLATORS: the numeric priority
 #: src/fu-util-common.c:2118
 msgid "Priority"
-msgstr ""
+msgstr "Prioritāte"
 
 #. TRANSLATORS: remote filename base
 #: src/fu-util-common.c:2121
